@@ -6,9 +6,10 @@ declare namespace Cloudflare {
 		durableNamespaces: "ChatAgent";
 	}
 	interface Env {
-		AI: Ai;
 		ChatAgent: DurableObjectNamespace<import("./src/server").ChatAgent>;
 		DAADMIN: Fetcher /* da-admin-local */;
+		AWS_BEARER_TOKEN_BEDROCK: string;
+		AWS_REGION: string;
 	}
 }
 interface Env extends Cloudflare.Env {}

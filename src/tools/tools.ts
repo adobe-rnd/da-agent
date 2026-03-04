@@ -74,7 +74,11 @@ export function createDATools(client: DAAdminClient) {
 
     da_create_source: tool({
       description:
-        "Create a new source file in a DA repository with the specified content.",
+        "Create a new source file in a DA repository with the specified content. " +
+        "Content MUST be valid Edge Delivery Services (EDS) semantic HTML: wrap all page content in <main>, " +
+        "separate sections with <hr>, represent EDS blocks as <div class=\"block-name\"> elements where each " +
+        "content row is a child <div> and each column a nested <div>, use proper semantic HTML elements " +
+        "(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks.",
       inputSchema: z.object({
         org: z.string().describe("Organization name"),
         repo: z.string().describe("Repository name"),
@@ -109,7 +113,11 @@ export function createDATools(client: DAAdminClient) {
 
     da_update_source: tool({
       description:
-        "Update an existing source file in a DA repository with new content.",
+        "Update an existing source file in a DA repository with new content. " +
+        "Content MUST be valid Edge Delivery Services (EDS) semantic HTML: wrap all page content in <main>, " +
+        "separate sections with <hr>, represent EDS blocks as <div class=\"block-name\"> elements where each " +
+        "content row is a child <div> and each column a nested <div>, use proper semantic HTML elements " +
+        "(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks.",
       inputSchema: z.object({
         org: z.string().describe("Organization name"),
         repo: z.string().describe("Repository name"),

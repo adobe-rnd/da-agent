@@ -1,4 +1,4 @@
-import { createWorkersAI } from "workers-ai-provider";
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { routeAgentRequest } from "agents";
 import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
 import {
@@ -36,7 +36,10 @@ export class ChatAgent extends AIChatAgent<Env> {
 
     console.log("pageContext:", pageContext);
 
-    const workersai = createWorkersAI({ binding: this.env.AI });
+    const bedrock = createAmazonBedrock({
+      region: this.env.AWS_REGION,
+      apiKey: this.env.AWS_BEARER_TOKEN_BEDROCK
+    });
 
     const daTools = imsToken
       ? createDATools(
@@ -47,8 +50,12 @@ export class ChatAgent extends AIChatAgent<Env> {
         )
       : {};
 
+    console.log("AWS_REGION:", this.env.AWS_REGION);
+    console.log("token present:", !!this.env.AWS_BEARER_TOKEN_BEDROCK);
+
     const result = streamText({
-      model: workersai("@cf/zai-org/glm-4.7-flash"),
+      model: bedrock("anthropic.claude-3-5-sonnet-20241022-v2:0"),
+      onError: (error) => console.error("streamText error:", JSON.stringify(error)),
       system: `You are a helpful assistant for Document Authoring (DA) authoring platform.
 You help users with questions about DA features, content authoring, and best practices.
 Use the available tools to search documentation and provide accurate information.
@@ -63,6 +70,37 @@ CRITICAL INSTRUCTION - TOOL USAGE:
 - Good: "Here's the current content of this page:"
 - Bad: "Let me update that using da_update_source..."
 - Good: "Done! The page now contains..."
+
+## EDS HTML Content Rules
+ALL content you create or update via tools MUST be valid Edge Delivery Services (EDS) semantic HTML. Follow these rules strictly:
+
+**Page structure**
+- Wrap all page content in \`<main>\`
+- Divide content into sections using \`<hr>\` as a section separator
+- Each section is an implicit \`<div>\` grouping content between two \`<hr>\` tags
+
+**Blocks**
+- Represent EDS blocks as \`<div class="block-name">\` elements
+- Each row of block content is a child \`<div>\`
+- Each column within a row is a nested \`<div>\`, containing normal semantic HTML
+- For block variants add additional classes (e.g., \`<div class="cards full-width">\`)
+- Example:
+  \`\`\`html
+  <div class="hero">
+    <div>
+      <div><h2>Title</h2><p>Subtitle text</p></div>
+      <div><img src="..." alt="..."></div>
+    </div>
+  </div>
+  \`\`\`
+
+**Semantic HTML**
+- Use proper heading hierarchy: \`<h1>\` for page title, \`<h2>\`–\`<h6>\` for sections
+- Use \`<p>\`, \`<ul>\`, \`<ol>\`, \`<li>\`, \`<a>\`, \`<strong>\`, \`<em>\` as appropriate
+- Use \`<img>\` with descriptive \`alt\` attributes for all images
+- NEVER use inline styles (\`style="..."\`)
+- NEVER use non-semantic \`<div>\` or \`<span>\` for layout outside of block tables
+- NEVER use \`<br>\` for spacing; use proper block elements instead
 
 ${
   pageContext
@@ -124,7 +162,9 @@ When making DA tool calls, always use these values:
       abortSignal: options?.abortSignal
     });
 
-    return result.toUIMessageStreamResponse();
+    const response = result.toUIMessageStreamResponse();
+    console.log("response status:", response.status, "headers:", [...response.headers.entries()]);
+    return response;
   }
 }
 
