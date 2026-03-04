@@ -31,9 +31,9 @@ Try these prompts to see the different features:
 ```
 src/
   server.ts    # Chat agent with tools and scheduling
-  app.tsx      # Chat UI built with Kumo components
-  client.tsx   # React entry point
-  styles.css   # Tailwind + Kumo styles
+  app.ts       # Chat UI built with Lit web components
+  client.ts    # Web component entry point
+  styles.css   # Plain CSS styles
 ```
 
 ## What's included
@@ -43,7 +43,7 @@ src/
 - **Scheduling** — one-time, delayed, and recurring (cron) tasks
 - **Reasoning display** — shows model thinking as it streams, collapses when done
 - **Debug mode** — toggle in the header to inspect raw message JSON for each message
-- **Kumo UI** — Cloudflare's design system with dark/light mode
+- **Lit UI** — Web components with custom styling and dark/light mode
 - **Real-time** — WebSocket connection with automatic reconnection and message persistence
 
 ## Making it your own

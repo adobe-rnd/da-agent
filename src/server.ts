@@ -1,7 +1,6 @@
 import { createWorkersAI } from "workers-ai-provider";
-import { routeAgentRequest, type Schedule } from "agents";
-import { getSchedulePrompt, scheduleSchema } from "agents/schedule";
-import { AIChatAgent } from "@cloudflare/ai-chat";
+import { routeAgentRequest } from "agents";
+import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
 import {
   streamText,
   convertToModelMessages,
@@ -12,54 +11,83 @@ import {
   type ToolSet
 } from "ai";
 import { z } from "zod";
+import { DAAdminClient } from "./da-admin/client";
+import { createDATools } from "./tools/tools";
+
+const PageContextSchema = z.object({
+  org: z.string(),
+  site: z.string(),
+  path: z.string(),
+  view: z.string().optional()
+});
 
 export class ChatAgent extends AIChatAgent<Env> {
   async onChatMessage(
     onFinish: StreamTextOnFinishCallback<ToolSet>,
-    options?: { abortSignal?: AbortSignal }
+    options?: OnChatMessageOptions
   ) {
+    const pageContextResult = PageContextSchema.safeParse(
+      options?.body?.pageContext
+    );
+    const pageContext = pageContextResult.success
+      ? pageContextResult.data
+      : undefined;
+    const imsToken = options?.body?.imsToken as string | undefined;
+
+    console.log("pageContext:", pageContext);
+
     const workersai = createWorkersAI({ binding: this.env.AI });
+
+    const daTools = imsToken
+      ? createDATools(
+          new DAAdminClient({
+            apiToken: imsToken,
+            daadminService: this.env.DAADMIN
+          })
+        )
+      : {};
 
     const result = streamText({
       model: workersai("@cf/zai-org/glm-4.7-flash"),
-      system: `You are a helpful assistant. You can check the weather, get the user's timezone, run calculations, and schedule tasks.
+      system: `You are a helpful assistant for Document Authoring (DA) authoring platform.
+You help users with questions about DA features, content authoring, and best practices.
+Use the available tools to search documentation and provide accurate information.
+Always provide helpful, accurate responses. You must never refer to the platform as "Dark Alley" or "DA".
 
-${getSchedulePrompt({ date: new Date() })}
+CRITICAL INSTRUCTION - TOOL USAGE:
+- NEVER mention tool names in your response text
+- NEVER say "I'll use", "Let me call", "using the function", "da_get_source", "da_update_source" or similar
+- NEVER explain that you are calling a tool or function
+- Simply perform the action and describe the RESULT, not the process
+- Bad: "I'll retrieve the content using da_get_source..."
+- Good: "Here's the current content of this page:"
+- Bad: "Let me update that using da_update_source..."
+- Good: "Done! The page now contains..."
 
-If the user asks to schedule a task, use the schedule tool to schedule the task.`,
+${
+  pageContext
+    ? `
+
+## Current Page Context
+The user is currently working on the following document in DA (Document Authoring):
+- org: ${pageContext.org}
+- site (repo): ${pageContext.site}
+- path: ${pageContext.path}
+- view: ${pageContext.view}
+
+When making DA tool calls, always use these values:
+- org: "${pageContext.org}"
+- repo: "${pageContext.site}"
+- path: "${pageContext.path}"`
+    : ""
+}`,
       // Prune old tool calls to save tokens on long conversations
       messages: pruneMessages({
         messages: await convertToModelMessages(this.messages),
         toolCalls: "before-last-2-messages"
       }),
       tools: {
-        // Server-side tool: runs automatically on the server
-        getWeather: tool({
-          description: "Get the current weather for a city",
-          inputSchema: z.object({
-            city: z.string().describe("City name")
-          }),
-          execute: async ({ city }) => {
-            // Replace with a real weather API in production
-            const conditions = ["sunny", "cloudy", "rainy", "snowy"];
-            const temp = Math.floor(Math.random() * 30) + 5;
-            return {
-              city,
-              temperature: temp,
-              condition:
-                conditions[Math.floor(Math.random() * conditions.length)],
-              unit: "celsius"
-            };
-          }
-        }),
-
-        // Client-side tool: no execute function — the browser handles it
-        getUserTimezone: tool({
-          description:
-            "Get the user's timezone from their browser. Use this when you need to know the user's local time.",
-          inputSchema: z.object({})
-        }),
-
+        ...daTools,
         // Approval tool: requires user confirmation before executing
         calculate: tool({
           description:
@@ -89,56 +117,6 @@ If the user asks to schedule a task, use the schedule tool to schedule the task.
               result: ops[operator](a, b)
             };
           }
-        }),
-
-        scheduleTask: tool({
-          description:
-            "Schedule a task to be executed at a later time. Use this when the user asks to be reminded or wants something done later.",
-          inputSchema: scheduleSchema,
-          execute: async ({ when, description }) => {
-            if (when.type === "no-schedule") {
-              return "Not a valid schedule input";
-            }
-            const input =
-              when.type === "scheduled"
-                ? when.date
-                : when.type === "delayed"
-                  ? when.delayInSeconds
-                  : when.type === "cron"
-                    ? when.cron
-                    : null;
-            if (!input) return "Invalid schedule type";
-            try {
-              this.schedule(input, "executeTask", description);
-              return `Task scheduled: "${description}" (${when.type}: ${input})`;
-            } catch (error) {
-              return `Error scheduling task: ${error}`;
-            }
-          }
-        }),
-
-        getScheduledTasks: tool({
-          description: "List all tasks that have been scheduled",
-          inputSchema: z.object({}),
-          execute: async () => {
-            const tasks = this.getSchedules();
-            return tasks.length > 0 ? tasks : "No scheduled tasks found.";
-          }
-        }),
-
-        cancelScheduledTask: tool({
-          description: "Cancel a scheduled task by its ID",
-          inputSchema: z.object({
-            taskId: z.string().describe("The ID of the task to cancel")
-          }),
-          execute: async ({ taskId }) => {
-            try {
-              this.cancelSchedule(taskId);
-              return `Task ${taskId} cancelled.`;
-            } catch (error) {
-              return `Error cancelling task: ${error}`;
-            }
-          }
         })
       },
       onFinish,
@@ -147,23 +125,6 @@ If the user asks to schedule a task, use the schedule tool to schedule the task.
     });
 
     return result.toUIMessageStreamResponse();
-  }
-
-  async executeTask(description: string, _task: Schedule<string>) {
-    // Do the actual work here (send email, call API, etc.)
-    console.log(`Executing scheduled task: ${description}`);
-
-    // Notify connected clients via a broadcast event.
-    // We use broadcast() instead of saveMessages() to avoid injecting
-    // into chat history — that would cause the AI to see the notification
-    // as new context and potentially loop.
-    this.broadcast(
-      JSON.stringify({
-        type: "scheduled-task",
-        description,
-        timestamp: new Date().toISOString()
-      })
-    );
   }
 }
 
