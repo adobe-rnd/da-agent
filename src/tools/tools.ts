@@ -7,6 +7,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import type { DAAdminClient } from "../da-admin/client";
 import type { DAAPIError } from "../da-admin/types";
+import { ensureHtmlExtension } from "./utils";
 
 function isDAAPIError(e: unknown): e is DAAPIError {
   return typeof e === "object" && e !== null && "status" in e && "message" in e;
@@ -64,7 +65,7 @@ export function createDATools(client: DAAdminClient) {
       }),
       execute: async ({ org, repo, path }) => {
         try {
-          return await client.getSource(org, repo, path);
+          return await client.getSource(org, repo, ensureHtmlExtension(path));
         } catch (e) {
           if (isDAAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };
@@ -75,8 +76,9 @@ export function createDATools(client: DAAdminClient) {
     da_create_source: tool({
       description:
         "Create a new source file in a DA repository with the specified content. " +
-        "Content MUST be valid Edge Delivery Services (EDS) semantic HTML: wrap all page content in <main>, " +
-        "separate sections with <hr>, represent EDS blocks as <div class=\"block-name\"> elements where each " +
+        "Content MUST be a plain HTML string (no CDATA, no markdown fences) starting with <body> and ending with </body>, " +
+        "with all page content wrapped in <main> inside <body>. " +
+        "Separate sections with <hr>, represent EDS blocks as <div class=\"block-name\"> elements where each " +
         "content row is a child <div> and each column a nested <div>, use proper semantic HTML elements " +
         "(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks.",
       inputSchema: z.object({
@@ -101,7 +103,7 @@ export function createDATools(client: DAAdminClient) {
           return await client.createSource(
             org,
             repo,
-            path,
+            ensureHtmlExtension(path),
             content,
             contentType
           );
@@ -115,8 +117,9 @@ export function createDATools(client: DAAdminClient) {
     da_update_source: tool({
       description:
         "Update an existing source file in a DA repository with new content. " +
-        "Content MUST be valid Edge Delivery Services (EDS) semantic HTML: wrap all page content in <main>, " +
-        "separate sections with <hr>, represent EDS blocks as <div class=\"block-name\"> elements where each " +
+        "Content MUST be a plain HTML string (no CDATA, no markdown fences) starting with <body> and ending with </body>, " +
+        "with all page content wrapped in <main> inside <body>. " +
+        "Separate sections with <hr>, represent EDS blocks as <div class=\"block-name\"> elements where each " +
         "content row is a child <div> and each column a nested <div>, use proper semantic HTML elements " +
         "(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks.",
       inputSchema: z.object({
@@ -132,7 +135,7 @@ export function createDATools(client: DAAdminClient) {
           return await client.updateSource(
             org,
             repo,
-            path,
+            ensureHtmlExtension(path),
             content,
             contentType
           );
@@ -154,7 +157,7 @@ export function createDATools(client: DAAdminClient) {
       needsApproval: async () => true,
       execute: async ({ org, repo, path }) => {
         try {
-          return await client.deleteSource(org, repo, path);
+          return await client.deleteSource(org, repo, ensureHtmlExtension(path));
         } catch (e) {
           if (isDAAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };
@@ -178,8 +181,8 @@ export function createDATools(client: DAAdminClient) {
           return await client.copyContent(
             org,
             repo,
-            sourcePath,
-            destinationPath
+            ensureHtmlExtension(sourcePath),
+            ensureHtmlExtension(destinationPath)
           );
         } catch (e) {
           if (isDAAPIError(e)) return { error: e.message, status: e.status };
@@ -205,8 +208,8 @@ export function createDATools(client: DAAdminClient) {
           return await client.moveContent(
             org,
             repo,
-            sourcePath,
-            destinationPath
+            ensureHtmlExtension(sourcePath),
+            ensureHtmlExtension(destinationPath)
           );
         } catch (e) {
           if (isDAAPIError(e)) return { error: e.message, status: e.status };
@@ -230,7 +233,7 @@ export function createDATools(client: DAAdminClient) {
       }),
       execute: async ({ org, repo, path, label }) => {
         try {
-          return await client.createVersion(org, repo, path, label);
+          return await client.createVersion(org, repo, ensureHtmlExtension(path), label);
         } catch (e) {
           if (isDAAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };
@@ -248,7 +251,7 @@ export function createDATools(client: DAAdminClient) {
       }),
       execute: async ({ org, repo, path }) => {
         try {
-          return await client.getVersions(org, repo, path);
+          return await client.getVersions(org, repo, ensureHtmlExtension(path));
         } catch (e) {
           if (isDAAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };

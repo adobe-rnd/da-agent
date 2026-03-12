@@ -12,6 +12,8 @@ import {
 import { z } from "zod";
 import { DAAdminClient } from "./da-admin/client";
 import { createDATools } from "./tools/tools";
+import { ensureHtmlExtension } from "./tools/utils";
+import { createCollabClient } from "./collab-client";
 
 const PageContextSchema = z.object({
   org: z.string(),
@@ -49,9 +51,27 @@ export class ChatAgent extends AIChatAgent<Env> {
         )
       : {};
 
+    // Join collab session for edit-view conversations
+    const collab =
+      pageContext?.view === "edit" && imsToken
+        ? await createCollabClient(
+            `${pageContext.org}/${pageContext.site}/${ensureHtmlExtension(pageContext.path)}`,
+            imsToken,
+            pageContext.org
+          )
+        : null;
+
+    const wrappedOnFinish: StreamTextOnFinishCallback<ToolSet> = async (event) => {
+      collab?.disconnect();
+      return onFinish(event);
+    };
+
     const result = streamText({
       model: bedrock("anthropic.claude-3-5-sonnet-20241022-v2:0"),
-      onError: (error) => console.error("streamText error:", JSON.stringify(error)),
+      onError: (error) => {
+        console.error("streamText error:", JSON.stringify(error));
+        collab?.disconnect();
+      },
       system: `You are a helpful assistant for Document Authoring (DA) authoring platform.
 You help users with questions about DA features, content authoring, and best practices.
 Use the available tools to search documentation and provide accurate information.
@@ -59,7 +79,6 @@ Always provide helpful, accurate responses. You must never refer to the platform
 
 CRITICAL INSTRUCTION - TOOL USAGE:
 - NEVER mention tool names in your response text
-- NEVER say "I'll use", "Let me call", "using the function", "da_get_source", "da_update_source" or similar
 - NEVER explain that you are calling a tool or function
 - Simply perform the action and describe the RESULT, not the process
 - Bad: "I'll retrieve the content using da_get_source..."
@@ -69,6 +88,16 @@ CRITICAL INSTRUCTION - TOOL USAGE:
 
 ## EDS HTML Content Rules
 ALL content you create or update via tools MUST be valid Edge Delivery Services (EDS) semantic HTML. Follow these rules strictly:
+
+**Document structure**
+- The content string MUST start with \`<body>\` and end with \`</body>\`
+- Inside \`<body>\`, wrap all page content in \`<main>\`
+- Inside \`<main>\`, wrap all page content in \`<div>\` which is called a section.
+- Every page must have at least one section.
+- Start a new section with a new top level \`<div>\` tag, do not use \`<hr>\` for this.
+- Minimal valid structure: \`<body><main><div>...</div></main></body>\`
+- NEVER wrap the content in \`<![CDATA[…]]>\`, XML declarations, \`<!DOCTYPE>\`, \`<html>\`, or \`<head>\` tags
+- The content passed to create/update tools MUST be a plain HTML string — no markdown code fences, no JSON encoding, no escaping of angle brackets
 
 **Page structure**
 - Wrap all page content in \`<main>\`
@@ -82,12 +111,29 @@ ALL content you create or update via tools MUST be valid Edge Delivery Services 
 - For block variants add additional classes (e.g., \`<div class="cards full-width">\`)
 - Example:
   \`\`\`html
-  <div class="hero">
-    <div>
-      <div><h2>Title</h2><p>Subtitle text</p></div>
-      <div><img src="..." alt="..."></div>
-    </div>
-  </div>
+  <body>
+    <main>
+      <div>
+        <div class="hero">
+          <div>
+            <div><h2>Title</h2><p>Subtitle text</p>
+            <img src="..." alt="..."></div>
+          </div>
+        </div>
+        <p>...</p>
+        <div class="cards full-width">
+          <div>
+            <div><h2>Title</h2><p>Subtitle text</p></div>
+            <div><img src="..." alt="..."></div>
+          </div>
+          <div>
+            <div><h2>Title</h2><p>Subtitle text</p></div>
+            <div><img src="..." alt="..."></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </body>
   \`\`\`
 
 **Semantic HTML**
@@ -95,7 +141,7 @@ ALL content you create or update via tools MUST be valid Edge Delivery Services 
 - Use \`<p>\`, \`<ul>\`, \`<ol>\`, \`<li>\`, \`<a>\`, \`<strong>\`, \`<em>\` as appropriate
 - Use \`<img>\` with descriptive \`alt\` attributes for all images
 - NEVER use inline styles (\`style="..."\`)
-- NEVER use non-semantic \`<div>\` or \`<span>\` for layout outside of block tables
+- NEVER use non-semantic \`<div>\` \`<hr>\`,or \`<span>\` for layout outside of block tables
 
 ${
   pageContext
@@ -105,13 +151,20 @@ ${
 The user is currently working on the following document in DA (Document Authoring):
 - org: ${pageContext.org}
 - site (repo): ${pageContext.site}
-- path: ${pageContext.path}
+- path: ${ensureHtmlExtension(pageContext.path)}
 - view: ${pageContext.view}
 
 When making DA tool calls, always use these values:
 - org: "${pageContext.org}"
 - repo: "${pageContext.site}"
-- path: "${pageContext.path}"`
+- path: "${ensureHtmlExtension(pageContext.path)}"
+${pageContext.view === "edit" ? `
+## Edit View — Content Update Rules
+The user is in the document editor. Apply these rules for EVERY message in this session:
+- ALWAYS read the current page content first before making any changes
+- For ANY content change the user requests (edits, rewrites, additions, deletions, reformatting) you MUST call the update content tool to persist the change — never just describe the change in text
+- Apply ALL requested changes in a single update call — do not make partial updates
+- After a successful update, briefly confirm what was changed` : ""}`
     : ""
 }`,
       // Prune old tool calls to save tokens on long conversations
@@ -120,7 +173,7 @@ When making DA tool calls, always use these values:
         toolCalls: "before-last-2-messages"
       }),
       tools: daTools,
-      onFinish,
+      onFinish: wrappedOnFinish,
       stopWhen: stepCountIs(5),
       abortSignal: options?.abortSignal
     });
