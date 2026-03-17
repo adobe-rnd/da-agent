@@ -40,8 +40,13 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (url.pathname === '/chat' && request.method === 'POST') {
-      return handleChat(request, env);
+    if (url.pathname === '/chat') {
+      if (request.method === 'HEAD') {
+        return new Response(null, { status: 200, headers: CORS_HEADERS });
+      }
+      if (request.method === 'POST') {
+        return handleChat(request, env);
+      }
     }
 
     return new Response('Not found', { status: 404 });
