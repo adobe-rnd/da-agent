@@ -174,7 +174,7 @@ export class CollabClient {
 
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
-        console.warn(`[CollabClient] Connection timeout for ${this.docPath}`);
+        console.warn(`[CollabClient] Connection timeout after 5s for ${this.docPath} — proceeding without collab`);
         this.isConnected = false;
         resolve();
       }, 5000);
@@ -184,7 +184,7 @@ export class CollabClient {
           clearTimeout(timeout);
           this.isConnected = true;
           this.status = 'connected';
-          console.log(`[CollabClient] Synced with da-collab for ${this.docPath}`);
+          console.log(`[CollabClient] Joined collab session: ${this.docPath} as "${this.userName}"`);
           this.setAwarenessState('connected');
           this.setCursorAtStart();
           resolve();
@@ -193,7 +193,7 @@ export class CollabClient {
 
       this.provider!.on('connection-error', (error: unknown) => {
         clearTimeout(timeout);
-        console.error(`[CollabClient] Connection error for ${this.docPath}:`, error);
+        console.error(`[CollabClient] Failed to join collab session for ${this.docPath}:`, error);
         this.isConnected = false;
         this.status = 'error';
         resolve();
