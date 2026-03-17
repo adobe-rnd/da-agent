@@ -1,79 +1,124 @@
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
-import { routeAgentRequest } from "agents";
-import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import {
   streamText,
   convertToModelMessages,
   pruneMessages,
   stepCountIs,
-  type StreamTextOnFinishCallback,
-  type ToolSet
-} from "ai";
-import { z } from "zod";
-import { DAAdminClient } from "./da-admin/client";
-import { createDATools } from "./tools/tools";
-import { ensureHtmlExtension } from "./tools/utils";
-import { createCollabClient } from "./collab-client";
+  type UIMessage,
+} from 'ai';
+import { z } from 'zod';
+import { DAAdminClient } from './da-admin/client.js';
+import { createDATools } from './tools/tools.js';
+import { ensureHtmlExtension } from './tools/utils.js';
+import { createCollabClient } from './collab-client.js';
+
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
 const PageContextSchema = z.object({
   org: z.string(),
   site: z.string(),
   path: z.string(),
-  view: z.string().optional()
+  view: z.string().optional(),
 });
 
-export class ChatAgent extends AIChatAgent<Env> {
-  async onChatMessage(
-    onFinish: StreamTextOnFinishCallback<ToolSet>,
-    options?: OnChatMessageOptions
-  ) {
-    const pageContextResult = PageContextSchema.safeParse(
-      options?.body?.pageContext
-    );
-    const pageContext = pageContextResult.success
-      ? pageContextResult.data
-      : undefined;
-    const imsToken = options?.body?.imsToken as string | undefined;
+const ChatRequestSchema = z.object({
+  messages: z.array(z.any()),
+  pageContext: PageContextSchema.optional(),
+  imsToken: z.string().optional(),
+});
 
-    console.log("pageContext:", pageContext);
+type PageContext = z.infer<typeof PageContextSchema>;
 
-    const bedrock = createAmazonBedrock({
-      region: this.env.AWS_REGION,
-      apiKey: this.env.AWS_BEARER_TOKEN_BEDROCK
-    });
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
 
-    const daTools = imsToken
-      ? createDATools(
-          new DAAdminClient({
-            apiToken: imsToken,
-            daadminService: this.env.DAADMIN
-          })
-        )
-      : {};
+    const url = new URL(request.url);
+    if (url.pathname === '/chat' && request.method === 'POST') {
+      return handleChat(request, env);
+    }
 
-    // Join collab session for edit-view conversations
-    const collab =
-      pageContext?.view === "edit" && imsToken
-        ? await createCollabClient(
-            `${pageContext.org}/${pageContext.site}/${ensureHtmlExtension(pageContext.path)}`,
-            imsToken,
-            pageContext.org,
-            this.env.DACOLLAB
-          )
-        : null;
+    return new Response('Not found', { status: 404 });
+  },
+} satisfies ExportedHandler<Env>;
 
-    const wrappedOnFinish: StreamTextOnFinishCallback<ToolSet> = async (event) => {
+async function handleChat(request: Request, env: Env): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response('Invalid JSON', { status: 400 });
+  }
+
+  const parsed = ChatRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return new Response('Invalid request body', { status: 400 });
+  }
+
+  const { messages, pageContext, imsToken } = parsed.data;
+
+  console.log('pageContext:', pageContext);
+
+  const bedrock = createAmazonBedrock({
+    region: env.AWS_REGION,
+    apiKey: env.AWS_BEARER_TOKEN_BEDROCK,
+  });
+
+  const daTools = imsToken && env.DAADMIN
+    ? createDATools(
+      new DAAdminClient({
+        apiToken: imsToken,
+        daadminService: env.DAADMIN,
+      }),
+    )
+    : {};
+
+  const daOrigin = env.DA_ORIGIN ?? 'https://admin.da.live';
+  const sourceUrl = `${daOrigin}/source/${pageContext?.org}/${pageContext?.site}/${ensureHtmlExtension(pageContext?.path ?? '')}`;
+
+  const collab = pageContext?.view === 'edit' && imsToken && env.DACOLLAB
+    ? await createCollabClient(sourceUrl, imsToken, pageContext.org, env.DACOLLAB)
+    : null;
+
+  const result = streamText({
+    model: bedrock('anthropic.claude-3-5-sonnet-20241022-v2:0'),
+    onError: (error) => {
+      console.error('streamText error:', JSON.stringify(error));
       collab?.disconnect();
-      return onFinish(event);
-    };
+    },
+    onFinish: () => {
+      collab?.disconnect();
+    },
+    system: buildSystemPrompt(pageContext),
+    messages: pruneMessages({
+      messages: await convertToModelMessages(messages as UIMessage[]),
+      toolCalls: 'before-last-2-messages',
+    }),
+    tools: daTools,
+    stopWhen: stepCountIs(5),
+  });
 
-    const result = streamText({
-      model: bedrock("anthropic.claude-3-5-sonnet-20241022-v2:0"),
-      onError: (error) => {
-        console.error("streamText error:", JSON.stringify(error));
-        collab?.disconnect();
-      },
-      system: `You are a helpful assistant for Document Authoring (DA) authoring platform.
+  const streamResponse = result.toUIMessageStreamResponse();
+
+  const headers = new Headers(streamResponse.headers);
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    headers.set(key, value);
+  }
+
+  return new Response(streamResponse.body, {
+    status: streamResponse.status,
+    headers,
+  });
+}
+
+function buildSystemPrompt(pageContext?: PageContext): string {
+  return `You are a helpful assistant for Document Authoring (DA) authoring platform.
 You help users with questions about DA features, content authoring, and best practices.
 Use the available tools to search documentation and provide accurate information.
 Always provide helpful, accurate responses. You must never refer to the platform as "Dark Alley" or "DA".
@@ -99,11 +144,6 @@ ALL content you create or update via tools MUST be valid Edge Delivery Services 
 - Minimal valid structure: \`<body><main><div>...</div></main></body>\`
 - NEVER wrap the content in \`<![CDATA[…]]>\`, XML declarations, \`<!DOCTYPE>\`, \`<html>\`, or \`<head>\` tags
 - The content passed to create/update tools MUST be a plain HTML string — no markdown code fences, no JSON encoding, no escaping of angle brackets
-
-**Page structure**
-- Wrap all page content in \`<main>\`
-- Divide content into sections using \`<hr>\` as a section separator
-- Each section is an implicit \`<div>\` grouping content between two \`<hr>\` tags
 
 **Blocks**
 - Represent EDS blocks as \`<div class="block-name">\` elements
@@ -142,12 +182,10 @@ ALL content you create or update via tools MUST be valid Edge Delivery Services 
 - Use \`<p>\`, \`<ul>\`, \`<ol>\`, \`<li>\`, \`<a>\`, \`<strong>\`, \`<em>\` as appropriate
 - Use \`<img>\` with descriptive \`alt\` attributes for all images
 - NEVER use inline styles (\`style="..."\`)
-- NEVER use non-semantic \`<div>\` \`<hr>\`,or \`<span>\` for layout outside of block tables
-
+- NEVER use non-semantic \`<div>\` or \`<span>\` for layout outside of block tables
 ${
   pageContext
     ? `
-
 ## Current Page Context
 The user is currently working on the following document in DA (Document Authoring):
 - org: ${pageContext.org}
@@ -159,35 +197,17 @@ When making DA tool calls, always use these values:
 - org: "${pageContext.org}"
 - repo: "${pageContext.site}"
 - path: "${ensureHtmlExtension(pageContext.path)}"
-${pageContext.view === "edit" ? `
+${
+  pageContext.view === 'edit'
+    ? `
 ## Edit View — Content Update Rules
 The user is in the document editor. Apply these rules for EVERY message in this session:
 - ALWAYS read the current page content first before making any changes
 - For ANY content change the user requests (edits, rewrites, additions, deletions, reformatting) you MUST call the update content tool to persist the change — never just describe the change in text
 - Apply ALL requested changes in a single update call — do not make partial updates
-- After a successful update, briefly confirm what was changed` : ""}`
-    : ""
-}`,
-      // Prune old tool calls to save tokens on long conversations
-      messages: pruneMessages({
-        messages: await convertToModelMessages(this.messages),
-        toolCalls: "before-last-2-messages"
-      }),
-      tools: daTools,
-      onFinish: wrappedOnFinish,
-      stopWhen: stepCountIs(5),
-      abortSignal: options?.abortSignal
-    });
-
-    return result.toUIMessageStreamResponse();
-  }
+- After a successful update, briefly confirm what was changed`
+    : ''
+}`
+    : ''
+}`;
 }
-
-export default {
-  async fetch(request: Request, env: Env) {
-    return (
-      (await routeAgentRequest(request, env)) ||
-      new Response("Not found", { status: 404 })
-    );
-  }
-} satisfies ExportedHandler<Env>;

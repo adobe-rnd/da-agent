@@ -1,42 +1,32 @@
 {
-  "name": "agent-starter",
+  "name": "da-agent",
   "version": "1.0.0",
   "private": true,
-  "description": "Starter template for building AI chat agents on Cloudflare",
-  "keywords": [
-    "agents",
-    "ai",
-    "cloudflare"
-  ],
-  "license": "MIT",
+  "description": "AI assistant worker for Document Authoring (DA) platform",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "start": "vite dev",
-    "deploy": "vite build && wrangler deploy",
+    "dev": "wrangler dev -e dev",
+    "deploy": "wrangler deploy -e production",
     "types": "wrangler types env.d.ts --include-runtime false",
-    "format": "oxfmt --write .",
-    "lint": "oxlint src/",
-    "check": "oxfmt --check . && oxlint src/ && tsc"
+    "type-check": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.0",
-    "@cloudflare/ai-chat": "^0.1.3",
-    "agents": "^0.5.1",
     "ai": "^6.0.101",
-    "lit": "^3.3.0",
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.29",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.25.2",
+    "@adobe/eslint-config-helix": "^2.0.8",
     "@cloudflare/workers-types": "^4.20260227.0",
     "@types/node": "^25.3.1",
-    "oxfmt": "^0.34.0",
-    "oxlint": "^1.49.0",
+    "@typescript-eslint/eslint-plugin": "^8.32.1",
+    "@typescript-eslint/parser": "^8.32.1",
+    "eslint": "^8.57.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1",
     "wrangler": "^4.68.1"
   }
 }

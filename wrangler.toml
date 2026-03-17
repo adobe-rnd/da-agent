@@ -5,30 +5,44 @@ name = "da-agent"
 main = "src/server.ts"
 compatibility_date = "2026-01-28"
 compatibility_flags = ["nodejs_compat"]
-
-[vars]
-AWS_REGION = "us-east-1"
-
-[assets]
-not_found_handling = "single-page-application"
-run_worker_first = ["/agents/*"]
-
-[[durable_objects.bindings]]
-class_name = "ChatAgent"
-name = "ChatAgent"
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["ChatAgent"]
+keep_vars = true
 
 [observability]
 enabled = true
 
-# Service Bindings
-[[services]]
-binding = "DAADMIN"
-service = "da-admin"
+[dev]
+port = 5173
 
-[[services]]
-binding = "DACOLLAB"
-service = "da-collab"
+# ----------------------------------------------------------------------
+# production environment
+[env.production]
+name = "da-agent"
+
+services = [
+  { binding = "DAADMIN", service = "da-admin" },
+  { binding = "DACOLLAB", service = "da-collab" },
+]
+
+[env.production.vars]
+AWS_REGION = "us-west-2"
+ENVIRONMENT = "production"
+VERSION = "@@VERSION@@"
+RETURN_STACK_TRACES = "false"
+DA_ORIGIN = "https://admin.da.live"
+
+# ----------------------------------------------------------------------
+# dev environment (local)
+[env.dev]
+name = "da-agent-local"
+
+services = [
+  { binding = "DAADMIN", service = "da-admin-local" },
+  { binding = "DACOLLAB", service = "da-collab-local" },
+]
+
+[env.dev.vars]
+AWS_REGION = "us-west-2"
+ENVIRONMENT = "dev"
+VERSION="0.0.0-dev"
+RETURN_STACK_TRACES = "true"
+DA_ORIGIN = "http://localhost:8787"

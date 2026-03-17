@@ -4,6 +4,6 @@
  */
 export function ensureHtmlExtension(path: string): string {
   if (!path) return path;
-  const last = path.split("/").pop() ?? "";
-  return last.includes(".") ? path : `${path}.html`;
+  const last = path.split('/').pop() ?? '';
+  return last.includes('.') ? path : `${path}.html`;
 }

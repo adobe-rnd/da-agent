@@ -11,8 +11,8 @@ import type {
   DAVersionsResponse,
   DAMediaContent,
   DAMediaReference,
-  DAOperationResponse
-} from "./types";
+  DAOperationResponse,
+} from './types';
 
 export class DAAdminClient {
   private apiToken: string;
@@ -33,27 +33,27 @@ export class DAAdminClient {
    */
   private async request<T>(
     endpoint: string,
-    options: RequestInit & { binary?: boolean } = {}
+    options: RequestInit & { binary?: boolean } = {},
   ): Promise<T> {
     const { binary, ...requestOptions } = options;
-    const method = requestOptions.method || "GET";
+    const method = requestOptions.method || 'GET';
 
     console.log(`DA Admin API Call: Method: ${method} Endpoint: ${endpoint}`);
 
     const headers = new Headers(requestOptions.headers || {});
-    headers.set("Authorization", `Bearer ${this.apiToken}`);
+    headers.set('Authorization', `Bearer ${this.apiToken}`);
 
     // Only set Content-Type for non-FormData, non-binary requests
     const isFormData = requestOptions.body instanceof FormData;
     if (!binary && !isFormData) {
-      headers.set("Content-Type", "application/json");
+      headers.set('Content-Type', 'application/json');
     }
 
     if (requestOptions.body) {
       if (isFormData) {
-        console.log("  Body: FormData (multipart/form-data)");
+        console.log('  Body: FormData (multipart/form-data)');
       } else {
-        console.log("  Body:", requestOptions.body);
+        console.log('  Body:', requestOptions.body);
       }
     }
 
@@ -66,7 +66,7 @@ export class DAAdminClient {
       const request = new Request(`https://daadmin${endpoint}`, {
         ...requestOptions,
         headers,
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       const response = await this.daadminService.fetch(request);
@@ -75,40 +75,40 @@ export class DAAdminClient {
 
       const duration = Date.now() - startTime;
       console.log(
-        "DA Admin API Response:",
+        'DA Admin API Response:',
         response.status,
         response.statusText,
-        `(${duration}ms)`
+        `(${duration}ms)`,
       );
 
       if (!response.ok) {
         const error: DAAPIError = {
           status: response.status,
-          message: response.statusText
+          message: response.statusText,
         };
 
         try {
           const errorData: any = await response.json();
           error.details = errorData;
           error.message = errorData.message || error.message;
-          console.log("DA Admin API Error:", JSON.stringify(error, null, 2));
+          console.log('DA Admin API Error:', JSON.stringify(error, null, 2));
         } catch {
           // If response is not JSON, use statusText
-          console.log("DA Admin API Error:", error.status, error.message);
+          console.log('DA Admin API Error:', error.status, error.message);
         }
 
         throw error;
       }
 
-      const contentType = response.headers.get("content-type");
+      const contentType = response.headers.get('content-type');
 
       if (binary) {
-        const mimeType = (contentType || "application/octet-stream")
-          .split(";")[0]
+        const mimeType = (contentType || 'application/octet-stream')
+          .split(';')[0]
           .trim();
         const arrayBuffer = await response.arrayBuffer();
         const bytes = new Uint8Array(arrayBuffer);
-        let binaryStr = "";
+        let binaryStr = '';
         for (let i = 0; i < bytes.length; i += 1) {
           binaryStr += String.fromCharCode(bytes[i]);
         }
@@ -120,21 +120,21 @@ export class DAAdminClient {
         return {} as unknown as T;
       }
 
-      if (contentType?.includes("application/json")) {
+      if (contentType?.includes('application/json')) {
         return JSON.parse(body) as T;
       }
       return body as unknown as T;
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (error instanceof Error && error.name === "AbortError") {
-        console.log("DA Admin API Timeout after", this.timeout, "ms");
-        const timeoutError = new Error("Request timeout") as Error & DAAPIError;
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('DA Admin API Timeout after', this.timeout, 'ms');
+        const timeoutError = new Error('Request timeout') as Error & DAAPIError;
         timeoutError.status = 408;
         throw timeoutError;
       }
 
-      console.log("DA Admin API Request Failed:", error);
+      console.log('DA Admin API Request Failed:', error);
       throw error;
     }
   }
@@ -145,9 +145,9 @@ export class DAAdminClient {
   async listSources(
     org: string,
     repo: string,
-    path: string = ""
+    path: string = '',
   ): Promise<DAListSourcesResponse> {
-    const endpoint = `/list/${org}/${repo}${path ? `/${path}` : ""}`;
+    const endpoint = `/list/${org}/${repo}${path ? `/${path}` : ''}`;
     return this.request<DAListSourcesResponse>(endpoint);
   }
 
@@ -157,7 +157,7 @@ export class DAAdminClient {
   async getSource(
     org: string,
     repo: string,
-    path: string
+    path: string,
   ): Promise<DASourceContent> {
     const endpoint = `/source/${org}/${repo}/${path}`;
     return this.request<DASourceContent>(endpoint);
@@ -171,20 +171,20 @@ export class DAAdminClient {
     repo: string,
     path: string,
     content: string,
-    contentType?: string
+    contentType?: string,
   ): Promise<DAOperationResponse> {
     const endpoint = `/source/${org}/${repo}/${path}`;
 
     // Create Blob with content
-    const blob = new Blob([content], { type: contentType || "text/html" });
+    const blob = new Blob([content], { type: contentType || 'text/html' });
 
     // Create FormData and append the blob
     const formData = new FormData();
-    formData.append("data", blob);
+    formData.append('data', blob);
 
     return this.request<DAOperationResponse>(endpoint, {
-      method: "POST",
-      body: formData
+      method: 'POST',
+      body: formData,
     });
   }
 
@@ -196,20 +196,20 @@ export class DAAdminClient {
     repo: string,
     path: string,
     content: string,
-    contentType?: string
+    contentType?: string,
   ): Promise<DAOperationResponse> {
     const endpoint = `/source/${org}/${repo}/${path}`;
 
     // Create Blob with content
-    const blob = new Blob([content], { type: contentType || "text/html" });
+    const blob = new Blob([content], { type: contentType || 'text/html' });
 
     // Create FormData and append the blob
     const formData = new FormData();
-    formData.append("data", blob);
+    formData.append('data', blob);
 
     return this.request<DAOperationResponse>(endpoint, {
-      method: "POST",
-      body: formData
+      method: 'POST',
+      body: formData,
     });
   }
 
@@ -219,11 +219,11 @@ export class DAAdminClient {
   async deleteSource(
     org: string,
     repo: string,
-    path: string
+    path: string,
   ): Promise<DAOperationResponse> {
     const endpoint = `/source/${org}/${repo}/${path}`;
     return this.request<DAOperationResponse>(endpoint, {
-      method: "DELETE"
+      method: 'DELETE',
     });
   }
 
@@ -234,14 +234,14 @@ export class DAAdminClient {
     org: string,
     repo: string,
     sourcePath: string,
-    destinationPath: string
+    destinationPath: string,
   ): Promise<DAOperationResponse> {
     const endpoint = `/copy/${org}/${repo}/${sourcePath}`;
     const formData = new FormData();
-    formData.append("destination", `/${org}/${repo}/${destinationPath}`);
+    formData.append('destination', `/${org}/${repo}/${destinationPath}`);
     return this.request<DAOperationResponse>(endpoint, {
-      method: "POST",
-      body: formData
+      method: 'POST',
+      body: formData,
     });
   }
 
@@ -252,14 +252,14 @@ export class DAAdminClient {
     org: string,
     repo: string,
     sourcePath: string,
-    destinationPath: string
+    destinationPath: string,
   ): Promise<DAOperationResponse> {
     const endpoint = `/move/${org}/${repo}/${sourcePath}`;
     const formData = new FormData();
-    formData.append("destination", `/${org}/${repo}/${destinationPath}`);
+    formData.append('destination', `/${org}/${repo}/${destinationPath}`);
     return this.request<DAOperationResponse>(endpoint, {
-      method: "POST",
-      body: formData
+      method: 'POST',
+      body: formData,
     });
   }
 
@@ -270,12 +270,12 @@ export class DAAdminClient {
     org: string,
     repo: string,
     path: string,
-    label?: string
+    label?: string,
   ): Promise<DAVersionsResponse> {
     const endpoint = `/versionsource/${org}/${repo}/${path}`;
     return this.request<DAVersionsResponse>(endpoint, {
-      method: "POST",
-      ...(label ? { body: JSON.stringify({ label }) } : {})
+      method: 'POST',
+      ...(label ? { body: JSON.stringify({ label }) } : {}),
     });
   }
 
@@ -285,7 +285,7 @@ export class DAAdminClient {
   async getVersions(
     org: string,
     repo: string,
-    path: string
+    path: string,
   ): Promise<DAVersionsResponse> {
     const endpoint = `/versionlist/${org}/${repo}/${path}`;
     return this.request<DAVersionsResponse>(endpoint);
@@ -297,7 +297,7 @@ export class DAAdminClient {
   async lookupMedia(
     org: string,
     repo: string,
-    mediaPath: string
+    mediaPath: string,
   ): Promise<DAMediaContent> {
     const endpoint = `/source/${org}/${repo}/${mediaPath}`;
     return this.request<DAMediaContent>(endpoint, { binary: true });
@@ -309,7 +309,7 @@ export class DAAdminClient {
   async lookupFragment(
     org: string,
     repo: string,
-    fragmentPath: string
+    fragmentPath: string,
   ): Promise<DAMediaReference> {
     const endpoint = `/fragment/${org}/${repo}/${fragmentPath}`;
     return this.request<DAMediaReference>(endpoint);
@@ -330,7 +330,7 @@ export class DAAdminClient {
     path: string,
     base64Data: string,
     mimeType: string,
-    fileName: string
+    fileName: string,
   ): Promise<DAOperationResponse> {
     const endpoint = `/source/${org}/${repo}/${path}`;
 
@@ -346,11 +346,11 @@ export class DAAdminClient {
 
     // Create FormData and append the blob with filename
     const formData = new FormData();
-    formData.append("data", blob, fileName);
+    formData.append('data', blob, fileName);
 
     return this.request<DAOperationResponse>(endpoint, {
-      method: "POST",
-      body: formData
+      method: 'POST',
+      body: formData,
     });
   }
 }

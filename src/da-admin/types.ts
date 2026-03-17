@@ -5,7 +5,7 @@
 export interface DASource {
   name: string;
   path: string;
-  type: "file" | "directory";
+  type: 'file' | 'directory';
   lastModified?: string;
   size?: number;
 }
