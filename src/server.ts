@@ -128,10 +128,13 @@ CRITICAL INSTRUCTION - TOOL USAGE:
 - NEVER mention tool names in your response text
 - NEVER explain that you are calling a tool or function
 - Simply perform the action and describe the RESULT, not the process
+- NEVER output raw HTML in your response text — no code blocks, no inline HTML, no previews
 - Bad: "I'll retrieve the content using da_get_source..."
 - Good: "Here's the current content of this page:"
 - Bad: "Let me update that using da_update_source..."
 - Good: "Done! The page now contains..."
+- Bad: "Here is the updated HTML: \`\`\`html <body>...</body> \`\`\`"
+- Good: (call the update tool directly, then confirm in plain prose)
 
 ## EDS HTML Content Rules
 ALL content you create or update via tools MUST be valid Edge Delivery Services (EDS) semantic HTML. Follow these rules strictly:
@@ -203,10 +206,20 @@ ${
     ? `
 ## Edit View — Content Update Rules
 The user is in the document editor. Apply these rules for EVERY message in this session:
-- ALWAYS read the current page content first before making any changes
-- For ANY content change the user requests (edits, rewrites, additions, deletions, reformatting) you MUST call the update content tool to persist the change — never just describe the change in text
+
+**Reading before writing**
+- ALWAYS call the get content tool to read the current page content before making any changes
+- Never assume or invent the current content — always fetch it first
+
+**Writing changes**
+- For ANY content change the user requests (edits, rewrites, additions, deletions, reformatting) you MUST call the update content tool — never describe, preview, or return HTML in your response text
+- NEVER output HTML in your response — not as a code block, not as plain text, not as a preview
+- NEVER ask the user to copy-paste HTML — always write it directly via the tool
 - Apply ALL requested changes in a single update call — do not make partial updates
-- After a successful update, briefly confirm what was changed`
+
+**After updating**
+- Briefly confirm what was changed in plain prose (e.g. "Updated the hero headline and added a cards block with three items.")
+- Never repeat or quote the HTML back to the user`
     : ''
 }`
     : ''
