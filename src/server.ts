@@ -168,6 +168,33 @@ async function resolveApprovals(
 /* eslint-enable @typescript-eslint/no-explicit-any, no-plusplus, no-continue */
 /* eslint-enable no-loop-func, no-await-in-loop */
 
+const SKILLS_PATH = '.da/skills';
+
+async function loadSkills(client: DAAdminClient, org: string, site: string): Promise<string[]> {
+  try {
+    const listing = await client.listSources(org, site, SKILLS_PATH);
+    const mdFiles = listing.filter((s) => s.ext === 'md');
+    console.log(`Skills: found ${mdFiles.length} skill(s) in ${org}/${site}/${SKILLS_PATH}:`, mdFiles.map((f) => f.name));
+    // Paths from list API are absolute (/{org}/{site}/...) — strip prefix for getSource
+    const pathPrefix = `/${org}/${site}/`;
+    const results = await Promise.all(
+      mdFiles.map((f) => {
+        const relativePath = f.path.startsWith(pathPrefix) ? f.path.slice(pathPrefix.length) : f.path;
+        return client.getSource(org, site, relativePath).then((r) => r as unknown as string).catch((e) => {
+          console.log(`Skills: failed to load ${f.name}:`, e);
+          return null;
+        });
+      }),
+    );
+    const loaded = results.filter(Boolean) as string[];
+    console.log(`Skills: successfully loaded ${loaded.length}/${mdFiles.length} skill(s)`);
+    return loaded;
+  } catch {
+    console.log(`Skills: no skills folder found at ${org}/${site}/${SKILLS_PATH}`);
+    return [];
+  }
+}
+
 async function handleChat(request: Request, env: Env): Promise<Response> {
   let body: unknown;
   try {
@@ -195,18 +222,20 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ? await createCollabClient(sourceUrl, imsToken, pageContext.org, env.DACOLLAB)
     : null;
 
-  const daTools = imsToken && env.DAADMIN
-    ? createDATools(
-      new DAAdminClient({
-        apiToken: imsToken,
-        daadminService: env.DAADMIN,
-      }),
-      {
-        pageContext: pageContext ?? undefined,
-        collab: collab ?? undefined,
-      },
-    )
+  const daClient = imsToken && env.DAADMIN
+    ? new DAAdminClient({ apiToken: imsToken, daadminService: env.DAADMIN })
+    : null;
+
+  const daTools = daClient
+    ? createDATools(daClient, {
+      pageContext: pageContext ?? undefined,
+      collab: collab ?? undefined,
+    })
     : {};
+
+  const skills = daClient && pageContext
+    ? await loadSkills(daClient, pageContext.org, pageContext.site)
+    : [];
 
   // Process any pending tool approvals before passing messages to streamText.
   // The AI SDK's needsApproval is designed for stateful sessions; since each request
@@ -223,7 +252,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     onFinish: () => {
       collab?.disconnect();
     },
-    system: buildSystemPrompt(pageContext),
+    system: buildSystemPrompt(pageContext, skills),
     messages: processedMessages as ModelMessage[],
     tools: daTools,
     stopWhen: stepCountIs(5),
@@ -242,7 +271,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   });
 }
 
-function buildSystemPrompt(pageContext?: PageContext): string {
+function buildSystemPrompt(pageContext?: PageContext, skills: string[] = []): string {
   return `You are a helpful assistant for Document Authoring (DA) authoring platform.
 You help users with questions about DA features, content authoring, and best practices.
 Use the available tools to search documentation and provide accurate information.
@@ -346,6 +375,15 @@ The user is in the document editor. Apply these rules for EVERY message in this 
 - Never repeat or quote the HTML back to the user`
     : ''
 }`
+    : ''
+}${
+  skills.length > 0
+    ? `
+
+## Custom Skills
+The following skills define custom workflows configured for this site. When the user's request matches a skill, follow its instructions precisely:
+
+${skills.join('\n\n---\n\n')}`
     : ''
 }`;
 }

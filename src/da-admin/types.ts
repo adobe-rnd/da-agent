@@ -5,17 +5,12 @@
 export interface DASource {
   name: string;
   path: string;
-  type: 'file' | 'directory';
-  lastModified?: string;
-  size?: number;
+  ext?: string;
+  lastModified?: number;
 }
 
-export interface DAListSourcesResponse {
-  sources: DASource[];
-  path: string;
-  org: string;
-  repo: string;
-}
+// The list API returns a flat array of DASource objects
+export type DAListSourcesResponse = DASource[];
 
 export interface DASourceContent {
   path: string;
