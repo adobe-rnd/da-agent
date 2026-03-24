@@ -9,6 +9,9 @@ import { z } from 'zod';
 import type { DAAdminClient } from '../da-admin/client';
 import type { DAAPIError } from '../da-admin/types';
 import type { CollabClient } from '../collab-client';
+import { loadSkillContent, saveSkillContent } from '../skills/loader';
+import { listAgentPresets, loadAgentPreset, saveAgentPreset } from '../agents/loader';
+import type { AgentPreset } from '../agents/loader';
 import { ensureHtmlExtension } from './utils';
 import type { EDSAdminClient } from '../eds-admin/client';
 import type { EDSOperationResult, EDSPublishResult, EDSToolError } from '../eds-admin/types';
@@ -50,8 +53,13 @@ function useCollabForDoc(
   );
 }
 
-export function createDATools(client: DAAdminClient | null, options?: DAToolsOptions) {
+export function createDATools(
+  client: DAAdminClient | null,
+  options?: DAToolsOptions & { org?: string; repo?: string },
+) {
   const opts = options;
+  const ctxOrg = opts?.org ?? opts?.pageContext?.org ?? '';
+  const ctxRepo = opts?.repo ?? opts?.pageContext?.site ?? '';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tools: Record<string, any> = {};
@@ -390,6 +398,105 @@ export function createDATools(client: DAAdminClient | null, options?: DAToolsOpt
         }
       },
     });
+
+    tools.da_get_skill = tool({
+      description:
+        'Retrieve the full content of a skill by its ID. Skills are markdown documents '
+        + 'containing detailed instructions for specific tasks such as brand voice, SEO '
+        + 'checklists, or workflows that may reference MCP tools. Use this when the user '
+        + 'asks about or wants to apply a skill listed in the Available Skills section.',
+      inputSchema: z.object({
+        skillId: z.string().describe('The skill identifier (e.g., "brand-voice", "seo-checklist")'),
+      }),
+      execute: async ({ skillId }) => {
+        if (!ctxOrg) return { error: 'No organization context available' };
+        try {
+          const content = await loadSkillContent(client, ctxOrg, ctxRepo, skillId);
+          if (!content) return { error: `Skill "${skillId}" not found` };
+          return { skillId, content };
+        } catch (e) {
+          return { error: String(e) };
+        }
+      },
+    });
+
+    tools.da_create_skill = tool({
+      description:
+        'Create or update a skill. Skills are reusable markdown documents with instructions '
+        + 'that guide the assistant on specific tasks. They can reference MCP tools by name '
+        + '(e.g., mcp__<serverId>__<toolName>). Use this when the user wants to save a set '
+        + 'of instructions as a reusable skill.',
+      inputSchema: z.object({
+        skillId: z.string().describe(
+          'Skill identifier (lowercase alphanumeric with hyphens, e.g., "brand-voice")',
+        ),
+        content: z.string().describe('Full markdown content of the skill'),
+      }),
+      needsApproval: async () => true,
+      execute: async ({ skillId, content }) => {
+        if (!ctxOrg) return { error: 'No organization context available' };
+        try {
+          const result = await saveSkillContent(client, ctxOrg, ctxRepo, skillId, content);
+          if (!result.success) return { error: result.error };
+          return { skillId, saved: true };
+        } catch (e) {
+          return { error: String(e) };
+        }
+      },
+    });
+
+    tools.da_list_agents = tool({
+      description:
+        'List available agent presets. Agent presets are named configurations that bundle '
+        + 'a system prompt, skills, and MCP server selections into a reusable persona '
+        + '(e.g., "SEO Agent", "Brand Voice Agent").',
+      inputSchema: z.object({}),
+      execute: async () => {
+        if (!ctxOrg) return { error: 'No organization context available' };
+        try {
+          return await listAgentPresets(client, ctxOrg, ctxRepo);
+        } catch (e) {
+          return { error: String(e) };
+        }
+      },
+    });
+
+    tools.da_create_agent = tool({
+      description:
+        'Create or update an agent preset. An agent preset bundles a custom system prompt, '
+        + 'a list of skill IDs, and a list of MCP server IDs into a named configuration '
+        + 'that can be activated for specialized workflows.',
+      inputSchema: z.object({
+        agentId: z.string().describe(
+          'Agent identifier (lowercase alphanumeric with hyphens, e.g., "seo-agent")',
+        ),
+        name: z.string().describe('Display name for the agent'),
+        description: z.string().describe('Brief description of what this agent does'),
+        systemPrompt: z.string().describe('Custom system prompt instructions for this agent'),
+        skills: z.array(z.string()).optional().describe('Skill IDs to auto-load when this agent is active'),
+        mcpServers: z.array(z.string()).optional().describe('MCP server IDs to use with this agent'),
+      }),
+      needsApproval: async () => true,
+      execute: async ({
+        agentId, name, description, systemPrompt, skills, mcpServers,
+      }) => {
+        if (!ctxOrg) return { error: 'No organization context available' };
+        try {
+          const preset: AgentPreset = {
+            name,
+            description,
+            systemPrompt,
+            skills: skills ?? [],
+            mcpServers: mcpServers ?? [],
+          };
+          const result = await saveAgentPreset(client, ctxOrg, ctxRepo, agentId, preset);
+          if (!result.success) return { error: result.error };
+          return { agentId, saved: true };
+        } catch (e) {
+          return { error: String(e) };
+        }
+      },
+    });
   }
 
   return tools;
@@ -513,8 +620,6 @@ export function createEDSTools(client: EDSAdminClient) {
         const live = await client.publishLive(org, repo, path);
         return { preview, live };
       } catch (e) {
-        // Preview succeeded but live failed; only the error is returned (preview result dropped).
-        // Future: return { preview, error, status } to let the model surface partial success.
         if (isAPIError(e)) return { error: e.message, status: e.status };
         return { error: String(e) };
       }

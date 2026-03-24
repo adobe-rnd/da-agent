@@ -11,6 +11,14 @@ import { createCanvasClientTools, createDATools, createEDSTools } from './tools/
 import { ensureHtmlExtension } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
 import { initTelemetry, flushTelemetry } from './telemetry.js';
+import { readDiscoveryCache, loadEffectiveMCPConfig } from './mcp/discovery.js';
+import type { MCPServerConfig } from './mcp/types.js';
+import { loadSkillsIndex, loadSkillContent } from './skills/loader.js';
+import type { SkillsIndex } from './skills/loader.js';
+import { loadAgentPreset } from './agents/loader.js';
+import type { AgentPreset } from './agents/loader.js';
+import { connectAndRegisterMCPTools } from './mcp/tool-adapter.js';
+import type { MCPClient } from './mcp/client.js';
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -29,6 +37,7 @@ const ChatRequestSchema = z.object({
   messages: z.array(z.any()),
   pageContext: PageContextSchema.optional(),
   imsToken: z.string().optional(),
+  agentId: z.string().optional(),
 });
 
 type PageContext = z.infer<typeof PageContextSchema>;
@@ -264,7 +273,9 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response('Invalid request body', { status: 400 });
   }
 
-  const { messages, pageContext, imsToken } = parsed.data;
+  const {
+    messages, pageContext, imsToken, agentId,
+  } = parsed.data;
 
   const bedrock = createAmazonBedrock({
     region: env.AWS_REGION,
@@ -278,7 +289,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ? await createCollabClient(sourceUrl, imsToken, pageContext.org, env.DACOLLAB)
     : null;
 
-  const daClient = imsToken && env.DAADMIN
+  const adminClient = imsToken && env.DAADMIN
     ? new DAAdminClient({ apiToken: imsToken, daadminService: env.DAADMIN })
     : null;
 
@@ -286,37 +297,99 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ? new EDSAdminClient({ apiToken: imsToken })
     : null;
 
-  const daTools = createDATools(daClient, {
+  const daTools = createDATools(adminClient, {
     pageContext: pageContext ?? undefined,
     collab: collab ?? undefined,
+    org: pageContext?.org,
+    repo: pageContext?.site,
   });
   const edsTools = edsClient ? createEDSTools(edsClient) : {};
   const canvasClientTools = createCanvasClientTools();
-  const tools = { ...canvasClientTools, ...daTools, ...edsTools };
 
-  const skills = daClient && pageContext
-    ? await loadSkills(daClient, pageContext.org, pageContext.site)
-    : [];
+  // Load repo-scoped MCP discovery overlay and merge with system config.
+  let mcpConfig: { mcpServers: Record<string, MCPServerConfig>; toolAllowPatterns: string[] } | null = null;
+  if (adminClient && pageContext) {
+    try {
+      const repoOverlay = await readDiscoveryCache(adminClient, pageContext.org, pageContext.site);
+      const systemMCPConfig: Record<string, MCPServerConfig> = {};
+      mcpConfig = loadEffectiveMCPConfig(systemMCPConfig, repoOverlay);
+    } catch {
+      // MCP discovery is best-effort; failures do not block chat
+    }
+  }
+
+  // Load skills index for system prompt injection
+  let skillsIndex: SkillsIndex | null = null;
+  if (adminClient && pageContext) {
+    try {
+      skillsIndex = await loadSkillsIndex(adminClient, pageContext.org, pageContext.site);
+    } catch {
+      // Skills loading is best-effort
+    }
+  }
+
+  // Load agent preset if specified
+  let activeAgent: AgentPreset | null = null;
+  let agentSkillContents: Record<string, string> = {};
+  if (adminClient && pageContext && agentId) {
+    try {
+      activeAgent = await loadAgentPreset(adminClient, pageContext.org, pageContext.site, agentId);
+      if (activeAgent && activeAgent.skills.length > 0) {
+        const entries = await Promise.all(
+          activeAgent.skills.map(async (sid) => {
+            try {
+              const content = await loadSkillContent(adminClient, pageContext.org, pageContext.site, sid);
+              return content ? [sid, content] as const : null;
+            } catch { return null; }
+          }),
+        );
+        agentSkillContents = Object.fromEntries(entries.filter(Boolean) as [string, string][]);
+      }
+    } catch {
+      // Agent loading is best-effort
+    }
+  }
+
+  // Connect to live MCP servers and register their tools
+  let mcpTools: Record<string, any> = {};
+  let mcpClients: MCPClient[] = [];
+  if (mcpConfig && Object.keys(mcpConfig.mcpServers).length > 0) {
+    try {
+      const mcpResult = await connectAndRegisterMCPTools(mcpConfig);
+      mcpTools = mcpResult.tools;
+      mcpClients = mcpResult.clients;
+    } catch {
+      // MCP connection failures don't block chat
+    }
+  }
 
   // Process any pending tool approvals before passing messages to streamText.
   // The AI SDK's needsApproval is designed for stateful sessions; since each request
   // creates a fresh streamText call, we resolve approvals here instead.
-  const processedMessages = await resolveApprovals(messages, tools);
+  const allTools = { ...canvasClientTools, ...daTools, ...edsTools, ...mcpTools };
+
+  const processedMessages = await resolveApprovals(messages, allTools);
   const modelMessages = expandUserSelectionContextForModel(processedMessages);
+
+  const cleanupMCP = () => {
+    mcpClients.forEach((c) => { try { c.close(); } catch { /* ignore */ } });
+  };
 
   const result = streamText({
     model: bedrock('global.anthropic.claude-sonnet-4-6'),
     onError: (error) => {
       console.error('streamText error:', JSON.stringify(error));
       collab?.disconnect();
+      cleanupMCP();
     },
     onFinish: async () => {
       await flushTelemetry();
       collab?.disconnect();
+      cleanupMCP();
     },
-    system: buildSystemPrompt(pageContext, skills),
+    system: buildSystemPrompt(pageContext, mcpConfig, skillsIndex, activeAgent, agentSkillContents),
     messages: modelMessages as ModelMessage[],
-    tools,
+    tools: allTools,
     stopWhen: stepCountIs(5),
     experimental_telemetry: {
       isEnabled: true,
@@ -342,7 +415,54 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   });
 }
 
-function buildSystemPrompt(pageContext?: PageContext, skills: string[] = []): string {
+function buildMCPPromptSection(
+  mcpConfig?: { mcpServers: Record<string, MCPServerConfig>; toolAllowPatterns: string[] } | null,
+): string {
+  if (!mcpConfig || Object.keys(mcpConfig.mcpServers).length === 0) return '';
+  const serverLines = Object.keys(mcpConfig.mcpServers)
+    .map((id) => `- **${id}**: tools available as \`mcp__${id}__<toolName>\``)
+    .join('\n');
+  return `\n\n## Available MCP Servers\nThe following MCP servers have been discovered from the connected repository:\n${serverLines}\n\nTools from these servers follow the naming pattern \`mcp__<serverId>__<toolName>\`.`;
+}
+
+function buildSkillsPromptSection(skillsIndex?: SkillsIndex | null): string {
+  if (!skillsIndex || skillsIndex.skills.length === 0) return '';
+  const lines = skillsIndex.skills
+    .map((s) => `- **${s.id}**: ${s.title}`)
+    .join('\n');
+  return `\n\n## Available Skills
+The following skills are available for this ${skillsIndex.source === 'org' ? 'organization' : 'site'}. Use the da_get_skill tool to read a skill's full instructions before applying it.
+${lines}
+
+Skills may reference MCP tools by name. When applying a skill, read its full content first, then follow its instructions.`;
+}
+
+function buildAgentPromptSection(
+  agent?: AgentPreset | null,
+  skillContents?: Record<string, string>,
+): string {
+  if (!agent) return '';
+  let section = `\n\n## Active Agent: ${agent.name}\n${agent.description}\n\n### Agent Instructions\n${agent.systemPrompt}`;
+  if (skillContents && Object.keys(skillContents).length > 0) {
+    section += '\n\n### Pre-loaded Skills';
+    for (const [id, content] of Object.entries(skillContents)) {
+      section += `\n\n#### Skill: ${id}\n${content}`;
+    }
+    section += '\n\nApply the above skill instructions whenever relevant to the user\'s request.';
+  }
+  return section;
+}
+
+function buildSystemPrompt(
+  pageContext?: PageContext,
+  mcpConfig?: { mcpServers: Record<string, MCPServerConfig>; toolAllowPatterns: string[] } | null,
+  skillsIndex?: SkillsIndex | null,
+  activeAgent?: AgentPreset | null,
+  agentSkillContents?: Record<string, string>,
+): string {
+  const mcpSection = buildMCPPromptSection(mcpConfig);
+  const skillsSection = buildSkillsPromptSection(skillsIndex);
+  const agentSection = buildAgentPromptSection(activeAgent, agentSkillContents);
   return `You are a helpful assistant for Document Authoring (DA) authoring platform.
 You help users with questions about DA features, content authoring, and best practices.
 Use the available tools to search documentation and provide accurate information.
@@ -448,14 +568,18 @@ The user is in the document editor. Apply these rules for EVERY message in this 
     : ''
 }`
     : ''
-}${
-  skills.length > 0
-    ? `
+}${mcpSection}${skillsSection}${agentSection}
 
-## Custom Skills
-The following skills define custom workflows configured for this site. When the user's request matches a skill, follow its instructions precisely:
+## Skill Suggestions
+When you notice the user repeatedly asking for the same type of task across messages (e.g., applying the same formatting rules, following the same checklist, using the same content pattern), proactively suggest creating a reusable skill.
 
-${skills.join('\n\n---\n\n')}`
-    : ''
-}`;
+Format your suggestion as:
+**[SKILL_SUGGESTION]** I noticed you frequently [describe the pattern]. Would you like me to save this as a reusable skill? I can create a skill called "[suggested-id]" that captures these instructions so they are automatically applied in future sessions.
+
+Only suggest a skill when:
+1. You have observed the same pattern at least 2-3 times in the conversation
+2. The pattern involves specific, repeatable instructions (not just general questions)
+3. No existing skill already covers the same pattern
+
+If the user agrees, use the da_create_skill tool to save the skill.`;
 }
