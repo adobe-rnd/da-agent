@@ -10,6 +10,15 @@ import { createDATools } from './tools/tools.js';
 import { ensureHtmlExtension } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
 
+function getImsUserName(imsToken: string): string {
+  try {
+    const payload = JSON.parse(atob(imsToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.name ?? payload.email ?? payload.user_id ?? 'Unknown';
+  } catch {
+    return 'Unknown';
+  }
+}
+
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -222,8 +231,10 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const daOrigin = env.DA_ORIGIN ?? 'https://admin.da.live';
   const sourceUrl = `${daOrigin}/source/${pageContext?.org}/${pageContext?.site}/${ensureHtmlExtension(pageContext?.path ?? '')}`;
 
+  const userName = imsToken ? getImsUserName(imsToken) : 'Unknown';
+
   const collab = pageContext?.view === 'edit' && imsToken && env.DACOLLAB
-    ? await createCollabClient(sourceUrl, imsToken, pageContext.org, env.DACOLLAB)
+    ? await createCollabClient(sourceUrl, imsToken, userName, env.DACOLLAB)
     : null;
 
   const daClient = imsToken && env.DAADMIN
