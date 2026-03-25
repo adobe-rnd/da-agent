@@ -3,36 +3,25 @@
  * that can be merged with DA's built-in tools.
  */
 
-import { tool } from 'ai';
-import { jsonSchema } from 'ai';
+import { tool, jsonSchema } from 'ai';
 import { MCPClient } from './client.js';
 import type { MCPToolDefinition } from './client.js';
-import type { MCPServerConfig } from './types.js';
-
-function isRemoteConfig(cfg: MCPServerConfig): boolean {
-  return 'url' in cfg && typeof (cfg as any).url === 'string';
-}
+import type { MCPServerConfig, RemoteMCPServerConfig } from './types.js';
+import { isRemoteConfig } from './types.js';
 
 function getServerUrl(cfg: MCPServerConfig): string | null {
-  if (isRemoteConfig(cfg)) return (cfg as any).url;
-  // stdio servers need a bridgeUrl to be reachable from Workers
-  if ('bridgeUrl' in cfg && typeof (cfg as any).bridgeUrl === 'string') {
-    return (cfg as any).bridgeUrl;
-  }
+  if (isRemoteConfig(cfg)) return (cfg as RemoteMCPServerConfig).url;
   return null;
 }
 
-/**
- * Convert a single MCP tool definition into an AI SDK tool.
- * The tool name is prefixed with the serverId: mcp__<serverId>__<toolName>.
- */
 function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient: MCPClient) {
   const toolName = `mcp__${serverId}__${mcpTool.name}`;
   const description = mcpTool.description ?? `MCP tool ${mcpTool.name} from server ${serverId}`;
 
+  const inputSchema = mcpTool.inputSchema as Record<string, unknown> | undefined;
   const schema =
-    mcpTool.inputSchema && Object.keys(mcpTool.inputSchema).length > 0
-      ? jsonSchema(mcpTool.inputSchema as any)
+    inputSchema && Object.keys(inputSchema).length > 0
+      ? jsonSchema(inputSchema)
       : jsonSchema({ type: 'object', properties: {} });
 
   return {
@@ -80,13 +69,16 @@ export async function connectAndRegisterMCPTools(
     entries.map(async ([serverId, config]) => {
       const url = getServerUrl(config);
       if (!url) {
-        console.log(`MCP server ${serverId}: no reachable URL (stdio without bridgeUrl), skipping`);
+        console.log(`MCP server ${serverId}: no reachable URL, skipping`);
         return;
       }
 
+      const remoteHeaders = isRemoteConfig(config)
+        ? (config as RemoteMCPServerConfig).headers ?? {}
+        : {};
       const serverHeaders = {
         ...(options?.headers ?? {}),
-        ...((config as any).headers ?? {}),
+        ...remoteHeaders,
       };
 
       const client = new MCPClient(url, {

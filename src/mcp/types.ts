@@ -1,8 +1,7 @@
 /**
  * MCP (Model Context Protocol) server configuration types.
  *
- * These mirror the standard mcpServers value shape used by Claude Agent SDK /
- * Claude Code, supporting stdio and remote (HTTP/SSE) transports.
+ * Supports stdio and remote (HTTP/SSE) transports.
  */
 
 export interface StdioMCPServerConfig {
@@ -19,39 +18,6 @@ export interface RemoteMCPServerConfig {
 }
 
 export type MCPServerConfig = StdioMCPServerConfig | RemoteMCPServerConfig;
-
-export interface MCPDiscoveryWarning {
-  serverId: string;
-  message: string;
-}
-
-export interface MCPServerStatus {
-  id: string;
-  sourcePath: string;
-  status: 'ok' | 'reachable' | 'unreachable' | 'error';
-  transport?: 'stdio' | 'http' | 'sse';
-  endpoint?: string;
-  description?: string;
-  statusDetail?: string;
-}
-
-/**
- * Normalized discovery cache written to `.da/discovered-mcp.json`.
- */
-export interface DiscoveredMCP {
-  readAt: string;
-  mcpServers: Record<string, MCPServerConfig>;
-  warnings: MCPDiscoveryWarning[];
-  servers: MCPServerStatus[];
-}
-
-/**
- * Result of merging system (platform) and repo MCP configs.
- */
-export interface EffectiveMCPConfig {
-  mcpServers: Record<string, MCPServerConfig>;
-  toolAllowPatterns: string[];
-}
 
 export function isStdioConfig(config: MCPServerConfig): config is StdioMCPServerConfig {
   return 'command' in config && !('type' in config);

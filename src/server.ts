@@ -7,12 +7,6 @@ import { createCanvasClientTools, createDATools, createEDSTools } from './tools/
 import { ensureHtmlExtension } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
 import { initTelemetry, flushTelemetry } from './telemetry.js';
-import {
-  scanRepoMCPServers,
-  readDiscoveryCache,
-  loadEffectiveMCPConfig,
-  mergeConfigServers,
-} from './mcp/discovery.js';
 import type { MCPServerConfig } from './mcp/types.js';
 import { loadSkillsIndex, loadSkillContent } from './skills/loader.js';
 import type { SkillsIndex } from './skills/loader.js';
@@ -40,6 +34,7 @@ const ChatRequestSchema = z.object({
   imsToken: z.string().optional(),
   agentId: z.string().optional(),
   requestedSkills: z.array(z.string()).optional(),
+  mcpServers: z.record(z.string(), z.string()).optional(),
 });
 
 type PageContext = z.infer<typeof PageContextSchema>;
@@ -60,14 +55,8 @@ export default {
       }
     }
 
-    const mcpMatch = url.pathname.match(/^\/mcp-discovery\/([^/]+)\/([^/]+)$/);
-    if (mcpMatch && request.method === 'GET') {
-      return handleMcpDiscovery(request, env, mcpMatch[1], mcpMatch[2]);
-    }
-
-    const mcpToolsMatch = url.pathname.match(/^\/mcp-tools\/([^/]+)\/([^/]+)$/);
-    if (mcpToolsMatch && request.method === 'GET') {
-      return handleMcpToolsList(request, env, mcpToolsMatch[1], mcpToolsMatch[2]);
+    if (url.pathname === '/mcp-tools' && request.method === 'POST') {
+      return handleMcpToolsList(request);
     }
 
     return new Response('Not found', { status: 404 });
@@ -239,99 +228,42 @@ function expandUserSelectionContextForModel(messages: any[]): any[] {
   });
 }
 
-async function parseConfigServers(raw: string | null): Promise<Record<string, unknown>> {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(decodeURIComponent(raw));
-    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) return parsed;
-  } catch {
-    /* invalid JSON — ignore */
-  }
-  return {};
-}
-
-async function handleMcpDiscovery(
-  request: Request,
-  env: Env,
-  org: string,
-  site: string,
-): Promise<Response> {
-  const url = new URL(request.url);
-  const mcpPath = url.searchParams.get('mcpPath') || undefined;
-  let result = await scanRepoMCPServers(org, site, {
-    branch: 'main',
-    githubToken: env.GITHUB_TOKEN,
-    mcpPath,
-  });
-
-  const configServers = await parseConfigServers(url.searchParams.get('configServers'));
-  if (Object.keys(configServers).length > 0) {
-    result = await mergeConfigServers(result, configServers);
-  }
-
-  return new Response(JSON.stringify(result), {
-    status: 200,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-  });
-}
+const McpToolsRequestSchema = z.object({
+  servers: z.record(z.string(), z.string()),
+});
 
 /**
- * Connect to discovered MCP servers and list their individual tools.
- * Returns { servers: [{ id, tools: [{ name, description }] }] }
+ * Connect to the given MCP servers and list their individual tools.
+ * Accepts POST { servers: { id: url, ... } }.
+ * Returns { servers: [{ id, tools: [{ name, description }], error? }] }.
  */
-async function handleMcpToolsList(
-  request: Request,
-  env: Env,
-  org: string,
-  site: string,
-): Promise<Response> {
-  const url = new URL(request.url);
-  const mcpPath = url.searchParams.get('mcpPath') || undefined;
+async function handleMcpToolsList(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response('Invalid JSON', { status: 400, headers: CORS_HEADERS });
+  }
 
-  let discovery = await scanRepoMCPServers(org, site, {
-    branch: 'main',
-    githubToken: env.GITHUB_TOKEN,
-    mcpPath,
-  });
-
-  const configServers = await parseConfigServers(url.searchParams.get('configServers'));
-  if (Object.keys(configServers).length > 0) {
-    discovery = await mergeConfigServers(discovery, configServers);
+  const parsed = McpToolsRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return new Response('Expected { servers: Record<string, string> }', {
+      status: 400,
+      headers: CORS_HEADERS,
+    });
   }
 
   const serverTools: Array<{
     id: string;
-    description?: string;
     tools: Array<{ name: string; description: string }>;
     error?: string;
   }> = [];
 
-  const entries = Object.entries(discovery.mcpServers);
+  const entries = Object.entries(parsed.data.servers);
   const clients: MCPClient[] = [];
 
   await Promise.all(
-    entries.map(async ([serverId, config]) => {
-      const serverInfo = discovery.servers.find((s) => s.id === serverId);
-      let serverUrl: string | null = null;
-      if ('url' in config && typeof config.url === 'string') {
-        serverUrl = config.url;
-      } else if (
-        'bridgeUrl' in config &&
-        typeof (config as Record<string, unknown>).bridgeUrl === 'string'
-      ) {
-        serverUrl = (config as Record<string, unknown>).bridgeUrl as string;
-      }
-
-      if (!serverUrl) {
-        serverTools.push({
-          id: serverId,
-          description: serverInfo?.description,
-          tools: [],
-          error: 'No reachable URL (stdio without bridge)',
-        });
-        return;
-      }
-
+    entries.map(async ([serverId, serverUrl]) => {
       const client = new MCPClient(serverUrl, { timeout: 10000 });
       try {
         await client.initialize();
@@ -339,7 +271,6 @@ async function handleMcpToolsList(
         const tools = await client.listTools();
         serverTools.push({
           id: serverId,
-          description: serverInfo?.description,
           tools: tools.map((t) => ({
             name: t.name,
             description: t.description ?? `Tool from ${serverId}`,
@@ -348,7 +279,6 @@ async function handleMcpToolsList(
       } catch (e) {
         serverTools.push({
           id: serverId,
-          description: serverInfo?.description,
           tools: [],
           error: `Connection failed: ${e instanceof Error ? e.message : String(e)}`,
         });
@@ -356,7 +286,6 @@ async function handleMcpToolsList(
     }),
   );
 
-  // Clean up connections
   await Promise.allSettled(clients.map((c) => c.close()));
 
   return new Response(JSON.stringify({ servers: serverTools }), {
@@ -380,7 +309,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response('Invalid request body', { status: 400 });
   }
 
-  const { messages, pageContext, imsToken, agentId, requestedSkills } = parsed.data;
+  const { messages, pageContext, imsToken, agentId, requestedSkills, mcpServers } = parsed.data;
 
   const bedrock = createAmazonBedrock({
     region: env.AWS_REGION,
@@ -411,20 +340,20 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const edsTools = edsClient ? createEDSTools(edsClient) : {};
   const canvasClientTools = createCanvasClientTools();
 
-  // Load repo-scoped MCP discovery overlay and merge with system config.
-  let mcpConfig: {
-    mcpServers: Record<string, MCPServerConfig>;
-    toolAllowPatterns: string[];
-  } | null = null;
-  if (adminClient && pageContext) {
-    try {
-      const repoOverlay = await readDiscoveryCache(adminClient, pageContext.org, pageContext.site);
-      const systemMCPConfig: Record<string, MCPServerConfig> = {};
-      mcpConfig = loadEffectiveMCPConfig(systemMCPConfig, repoOverlay);
-    } catch {
-      // MCP discovery is best-effort; failures do not block chat
-    }
-  }
+  // Build MCP config from servers passed by the frontend (from DA config sheet).
+  const requestMcpServers = mcpServers ?? {};
+  const mcpConfig =
+    Object.keys(requestMcpServers).length > 0
+      ? {
+          mcpServers: Object.fromEntries(
+            Object.entries(requestMcpServers).map(([id, url]) => [
+              id,
+              { type: 'sse' as const, url },
+            ]),
+          ) as Record<string, MCPServerConfig>,
+          toolAllowPatterns: Object.keys(requestMcpServers).map((id) => `mcp__${id}__*`),
+        }
+      : null;
 
   // Load skills index for system prompt injection
   let skillsIndex: SkillsIndex | null = null;
@@ -506,7 +435,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   }
 
   // Connect to live MCP servers and register their tools
-  let mcpTools: Record<string, any> = {};
+  let mcpTools: Record<string, unknown> = {};
   let mcpClients: MCPClient[] = [];
   if (mcpConfig && Object.keys(mcpConfig.mcpServers).length > 0) {
     try {
