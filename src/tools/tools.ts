@@ -450,5 +450,43 @@ export function createEDSTools(client: EDSAdminClient) {
     },
   });
 
+  tools.content_unpreview = tool({
+    description:
+      'Remove a page from the EDS (Edge Delivery Services) preview environment. '
+      + 'Use this to retract a page from preview without affecting the live site.',
+    inputSchema: z.object({
+      org: z.string().describe('Organization name (owner)'),
+      repo: z.string().describe('Repository / site name'),
+      path: z.string().describe('Page path (e.g. "/docs/index" or "/docs/index.html" — .html will be stripped)'),
+    }),
+    execute: async ({ org, repo, path }): Promise<EDSOperationResult | EDSToolError> => {
+      try {
+        return await client.unpreview(org, repo, path);
+      } catch (e) {
+        if (isAPIError(e)) return { error: e.message, status: e.status };
+        return { error: String(e) };
+      }
+    },
+  });
+
+  tools.content_unpublish = tool({
+    description:
+      'Unpublish a page from the EDS (Edge Delivery Services) live environment. '
+      + 'Removes the page from the live site without deleting the source content.',
+    inputSchema: z.object({
+      org: z.string().describe('Organization name (owner)'),
+      repo: z.string().describe('Repository / site name'),
+      path: z.string().describe('Page path (e.g. "/docs/index" or "/docs/index.html" — .html will be stripped)'),
+    }),
+    execute: async ({ org, repo, path }): Promise<EDSOperationResult | EDSToolError> => {
+      try {
+        return await client.unpublishLive(org, repo, path);
+      } catch (e) {
+        if (isAPIError(e)) return { error: e.message, status: e.status };
+        return { error: String(e) };
+      }
+    },
+  });
+
   return tools;
 }

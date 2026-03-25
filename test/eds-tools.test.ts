@@ -8,7 +8,9 @@ import { createDATools, createEDSTools } from '../src/tools/tools';
 function makeEdsClient(overrides: Partial<EDSAdminClient> = {}): EDSAdminClient {
   return {
     preview: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index', url: 'https://main--repo--org.hlx.page/docs/index' }),
+    unpreview: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index' }),
     publishLive: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index', url: 'https://main--repo--org.hlx.live/docs/index' }),
+    unpublishLive: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index' }),
     ...overrides,
   } as unknown as EDSAdminClient;
 }
@@ -82,6 +84,60 @@ describe('eds_publish tool', () => {
 
     expect(result).toMatchObject({ error: 'Live failed', status: 502 });
     expect(result).not.toHaveProperty('preview');
+  });
+});
+
+describe('content_unpreview tool', () => {
+  it('is registered when edsClient is provided', () => {
+    const tools = createEDSTools(makeEdsClient());
+    expect(tools).toHaveProperty('content_unpreview');
+  });
+
+  it('calls edsClient.unpreview() and returns result', async () => {
+    const edsClient = makeEdsClient();
+    const tools = createEDSTools(edsClient);
+
+    const result = await tools.content_unpreview.execute({ org: 'o', repo: 'r', path: '/docs/index' }, {} as any);
+
+    expect(edsClient.unpreview).toHaveBeenCalledWith('o', 'r', '/docs/index');
+    expect(result).toMatchObject({ status: 200, path: '/docs/index' });
+  });
+
+  it('returns { error, status } when unpreview throws', async () => {
+    const edsClient = makeEdsClient({
+      unpreview: vi.fn().mockRejectedValue({ status: 404, message: 'Not Found' }),
+    });
+    const tools = createEDSTools(edsClient);
+
+    const result = await tools.content_unpreview.execute({ org: 'o', repo: 'r', path: '/p' }, {} as any);
+    expect(result).toMatchObject({ error: 'Not Found', status: 404 });
+  });
+});
+
+describe('content_unpublish tool', () => {
+  it('is registered when edsClient is provided', () => {
+    const tools = createEDSTools(makeEdsClient());
+    expect(tools).toHaveProperty('content_unpublish');
+  });
+
+  it('calls edsClient.unpublishLive() and returns result', async () => {
+    const edsClient = makeEdsClient();
+    const tools = createEDSTools(edsClient);
+
+    const result = await tools.content_unpublish.execute({ org: 'o', repo: 'r', path: '/docs/index' }, {} as any);
+
+    expect(edsClient.unpublishLive).toHaveBeenCalledWith('o', 'r', '/docs/index');
+    expect(result).toMatchObject({ status: 200, path: '/docs/index' });
+  });
+
+  it('returns { error, status } when unpublishLive throws', async () => {
+    const edsClient = makeEdsClient({
+      unpublishLive: vi.fn().mockRejectedValue({ status: 502, message: 'Live error' }),
+    });
+    const tools = createEDSTools(edsClient);
+
+    const result = await tools.content_unpublish.execute({ org: 'o', repo: 'r', path: '/p' }, {} as any);
+    expect(result).toMatchObject({ error: 'Live error', status: 502 });
   });
 });
 
