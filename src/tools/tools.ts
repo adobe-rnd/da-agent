@@ -395,6 +395,77 @@ export function createDATools(client: DAAdminClient | null, options?: DAToolsOpt
   return tools;
 }
 
+/**
+ * Runs only in the canvas browser; no `execute` so the AI SDK defers results to the client.
+ */
+export const CANVAS_CLIENT_ONLY_TOOLS = [
+  'da_bulk_preview',
+  'da_bulk_publish',
+  'da_bulk_delete',
+] as const;
+
+const bulkAemCanvasDialogOutputSchema = z.object({
+  cancelled: z.boolean().optional(),
+  okCount: z.number().optional(),
+  failCount: z.number().optional(),
+  message: z.string().optional(),
+  results: z
+    .array(
+      z.object({
+        path: z.string(),
+        ok: z.boolean(),
+        status: z.string().optional(),
+        message: z.string().optional(),
+      }),
+    )
+    .optional(),
+});
+
+const bulkAemPagesInputSchema = z.object({
+  pages: z
+    .array(z.string().min(1))
+    .min(1)
+    .describe(
+      'HTML page paths under the repo (e.g. "docs/guide.html" or "adobe/my-site/docs/guide.html")',
+    ),
+});
+
+/**
+ * Tools whose effects happen in the DA canvas UI (not on the worker).
+ * Each must omit `execute` and declare `outputSchema` for typing.
+ */
+export function createCanvasClientTools() {
+  return {
+    da_bulk_preview: tool({
+      description:
+        'Open a bulk preview dialog in the user\'s browser for multiple DA pages at once. '
+        + 'Use when the user wants to preview several pages in the canvas workspace without opening each one manually. '
+        + 'Paths may be relative to the current org/repo (e.g. "folder/page.html") or full "org/repo/path/to/page.html". '
+        + 'The user confirms in the dialog; results are returned after they finish or cancel.',
+      inputSchema: bulkAemPagesInputSchema,
+      outputSchema: bulkAemCanvasDialogOutputSchema,
+    }),
+    da_bulk_publish: tool({
+      description:
+        'Open a bulk publish dialog in the user\'s browser to publish multiple DA pages to AEM live (preview then live). '
+        + 'Use when the user wants to publish several pages at once from the canvas workspace. '
+        + 'Paths may be relative to the current org/repo or full "org/repo/path/to/page.html". '
+        + 'The user runs the action in the dialog; results return after they finish or cancel.',
+      inputSchema: bulkAemPagesInputSchema,
+      outputSchema: bulkAemCanvasDialogOutputSchema,
+    }),
+    da_bulk_delete: tool({
+      description:
+        'Open a bulk delete dialog in the user\'s browser to unpublish multiple pages from AEM live (DELETE on live). '
+        + 'Use only when the user explicitly wants to remove published pages. '
+        + 'Paths may be relative to the current org/repo or full "org/repo/path/to/page.html". '
+        + 'The user confirms in the dialog; results return after they finish or cancel.',
+      inputSchema: bulkAemPagesInputSchema,
+      outputSchema: bulkAemCanvasDialogOutputSchema,
+    }),
+  };
+}
+
 export function createEDSTools(client: EDSAdminClient) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tools: Record<string, any> = {};

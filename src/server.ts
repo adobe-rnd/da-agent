@@ -7,7 +7,7 @@ import {
 import { z } from 'zod';
 import { DAAdminClient } from './da-admin/client.js';
 import { EDSAdminClient } from './eds-admin/client.js';
-import { createDATools, createEDSTools } from './tools/tools.js';
+import { createCanvasClientTools, createDATools, createEDSTools } from './tools/tools.js';
 import { ensureHtmlExtension } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
 
@@ -288,7 +288,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     collab: collab ?? undefined,
   });
   const edsTools = edsClient ? createEDSTools(edsClient) : {};
-  const tools = { ...daTools, ...edsTools };
+  const canvasClientTools = createCanvasClientTools();
+  const tools = { ...canvasClientTools, ...daTools, ...edsTools };
 
   const skills = daClient && pageContext
     ? await loadSkills(daClient, pageContext.org, pageContext.site)
@@ -335,6 +336,7 @@ Use the available tools to search documentation and provide accurate information
 Always provide helpful, accurate responses. You must never refer to the platform as "Dark Alley" or "DA".
 
 CRITICAL INSTRUCTION - TOOL USAGE:
+- For bulk preview, publish, or unpublish (live delete) of multiple DA pages in the canvas workspace, use the matching bulk canvas tools (run in the browser). Do not claim the operation finished until the user completes or dismisses the dialog.
 - NEVER mention tool names in your response text
 - NEVER explain that you are calling a tool or function
 - Simply perform the action and describe the RESULT, not the process
