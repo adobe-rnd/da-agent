@@ -29,6 +29,13 @@ const ChatRequestSchema = z.object({
   messages: z.array(z.any()),
   pageContext: PageContextSchema.optional(),
   imsToken: z.string().optional(),
+  attachments: z.array(z.object({
+    id: z.string().min(1),
+    fileName: z.string().min(1),
+    mediaType: z.string().min(1),
+    dataBase64: z.string().min(1),
+    sizeBytes: z.number().int().nonnegative().optional(),
+  })).optional(),
 });
 
 type PageContext = z.infer<typeof PageContextSchema>;
@@ -287,6 +294,58 @@ function expandUserSelectionContextForModel(messages: any[]): any[] {
   });
 }
 
+function formatAttachmentsForModel(items: Array<{
+  id: string;
+  fileName: string;
+  mediaType: string;
+  sizeBytes?: number;
+}>): string {
+  const lines: string[] = [
+    'The user attached file(s). Binary contents are not available in chat context.',
+    'If you need one for upload, call content_upload using attachmentRef from this list.',
+    '',
+    'Attached files:',
+  ];
+  items.forEach((item) => {
+    const size = typeof item.sizeBytes === 'number' ? `, ${item.sizeBytes} bytes` : '';
+    lines.push(`- [${item.id}] ${item.fileName} (${item.mediaType}${size})`);
+  });
+  return lines.join('\n');
+}
+
+function expandLatestUserAttachmentsForModel(messages: any[], attachmentMeta: Array<{
+  id: string;
+  fileName: string;
+  mediaType: string;
+  sizeBytes?: number;
+}>): any[] {
+  if (!Array.isArray(attachmentMeta) || attachmentMeta.length === 0) {
+    return messages.map((msg) => {
+      if (msg.role !== 'user' || !msg || typeof msg !== 'object') return msg;
+      const next = { ...msg };
+      delete next.attachmentsMeta;
+      return next;
+    });
+  }
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === 'user') {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  return messages.map((msg, idx) => {
+    if (msg.role !== 'user' || !msg || typeof msg !== 'object') return msg;
+    const next = { ...msg };
+    delete next.attachmentsMeta;
+    if (idx !== lastUserIndex) return next;
+    const userText = typeof next.content === 'string' ? next.content : String(next.content ?? '');
+    const prefix = formatAttachmentsForModel(attachmentMeta);
+    next.content = `${prefix}\n\n---\n\nUser message:\n${userText}`;
+    return next;
+  });
+}
+
 async function handleChat(request: Request, env: Env): Promise<Response> {
   initTelemetry(env);
 
@@ -302,7 +361,11 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response('Invalid request body', { status: 400 });
   }
 
-  const { messages, pageContext, imsToken } = parsed.data;
+  const {
+    messages, pageContext, imsToken, attachments = [],
+  } = parsed.data;
+
+  const attachmentMap = new Map(attachments.map((a) => [a.id, a]));
 
   const bedrock = createAmazonBedrock({
     region: env.AWS_REGION,
@@ -327,6 +390,15 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const daTools = createDATools(daClient, {
     pageContext: pageContext ?? undefined,
     collab: collab ?? undefined,
+    resolveAttachmentByRef: (attachmentRef: string) => {
+      const hit = attachmentMap.get(attachmentRef);
+      if (!hit) return null;
+      return {
+        base64Data: hit.dataBase64,
+        mimeType: hit.mediaType,
+        fileName: hit.fileName,
+      };
+    },
   });
   const edsTools = edsClient ? createEDSTools(edsClient) : {};
   const canvasClientTools = createCanvasClientTools();
@@ -340,9 +412,16 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   // The AI SDK's needsApproval is designed for stateful sessions; since each request
   // creates a fresh streamText call, we resolve approvals here instead.
   const processedMessages = await resolveApprovals(messages, tools);
-  const modelMessages = expandUserSelectionContextForModel(
+  const withSelectionContext = expandUserSelectionContextForModel(
     stripClientOnlyToolInputs(processedMessages),
   );
+  const attachmentMeta = attachments.map((a) => ({
+    id: a.id,
+    fileName: a.fileName,
+    mediaType: a.mediaType,
+    ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
+  }));
+  const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
 
   const result = streamText({
     model: bedrock('global.anthropic.claude-sonnet-4-6'),
