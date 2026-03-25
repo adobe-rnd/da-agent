@@ -11,7 +11,7 @@ import { createCanvasClientTools, createDATools, createEDSTools } from './tools/
 import { ensureHtmlExtension } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
 import { initTelemetry, flushTelemetry } from './telemetry.js';
-import { scanRepoMCPServers, readDiscoveryCache, loadEffectiveMCPConfig } from './mcp/discovery.js';
+import { scanRepoMCPServers, readDiscoveryCache, loadEffectiveMCPConfig, mergeConfigServers } from './mcp/discovery.js';
 import type { MCPServerConfig } from './mcp/types.js';
 import { loadSkillsIndex, loadSkillContent } from './skills/loader.js';
 import type { SkillsIndex } from './skills/loader.js';
@@ -238,6 +238,15 @@ function expandUserSelectionContextForModel(messages: any[]): any[] {
   });
 }
 
+async function parseConfigServers(raw: string | null): Promise<Record<string, unknown>> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw));
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) return parsed;
+  } catch { /* invalid JSON — ignore */ }
+  return {};
+}
+
 async function handleMcpDiscovery(
   request: Request,
   env: Env,
@@ -246,11 +255,16 @@ async function handleMcpDiscovery(
 ): Promise<Response> {
   const url = new URL(request.url);
   const mcpPath = url.searchParams.get('mcpPath') || undefined;
-  const result = await scanRepoMCPServers(org, site, {
+  let result = await scanRepoMCPServers(org, site, {
     branch: 'main',
     githubToken: env.GITHUB_TOKEN,
     mcpPath,
   });
+
+  const configServers = await parseConfigServers(url.searchParams.get('configServers'));
+  if (Object.keys(configServers).length > 0) {
+    result = await mergeConfigServers(result, configServers);
+  }
 
   return new Response(JSON.stringify(result), {
     status: 200,
@@ -271,11 +285,16 @@ async function handleMcpToolsList(
   const url = new URL(request.url);
   const mcpPath = url.searchParams.get('mcpPath') || undefined;
 
-  const discovery = await scanRepoMCPServers(org, site, {
+  let discovery = await scanRepoMCPServers(org, site, {
     branch: 'main',
     githubToken: env.GITHUB_TOKEN,
     mcpPath,
   });
+
+  const configServers = await parseConfigServers(url.searchParams.get('configServers'));
+  if (Object.keys(configServers).length > 0) {
+    discovery = await mergeConfigServers(discovery, configServers);
+  }
 
   const serverTools: Array<{
     id: string;

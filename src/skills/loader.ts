@@ -88,7 +88,7 @@ export async function loadSkillsIndex(
         const subPath = source === 'org' ? `skills/${item.name}${item.ext && !item.name.endsWith('.md') ? `.${item.ext}` : ''}` : pathSegment;
 
         const content = await client.getSource(org, target, subPath);
-        const body = typeof content === 'string' ? content : (content as any)?.content ?? '';
+        const body = typeof content === 'string' ? content : (content as unknown as { content?: string })?.content ?? '';
         return { id, title: extractTitle(body) };
       } catch {
         return { id, title: id };
@@ -114,7 +114,7 @@ export async function loadSkillContent(
   // Site-level
   try {
     const content = await client.getSource(org, site, `${SKILLS_PATH}/${filename}`);
-    const body = typeof content === 'string' ? content : (content as any)?.content ?? '';
+    const body = typeof content === 'string' ? content : (content as unknown as { content?: string })?.content ?? '';
     if (body) return body;
   } catch {
     // fall through to org-level
@@ -123,7 +123,7 @@ export async function loadSkillContent(
   // Org-level
   try {
     const content = await client.getSource(org, '.da', `skills/${filename}`);
-    const body = typeof content === 'string' ? content : (content as any)?.content ?? '';
+    const body = typeof content === 'string' ? content : (content as unknown as { content?: string })?.content ?? '';
     if (body) return body;
   } catch {
     // not found
@@ -146,7 +146,8 @@ export async function saveSkillContent(
   try {
     await client.createSource(org, site, `${SKILLS_PATH}/${filename}`, content, 'text/markdown');
     return { success: true };
-  } catch (e: any) {
-    return { success: false, error: e?.message ?? String(e) };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
   }
 }

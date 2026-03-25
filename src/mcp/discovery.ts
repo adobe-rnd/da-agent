@@ -58,12 +58,12 @@ async function listGitHubDir(
   try {
     const resp = await ghFetch(url, token);
     if (!resp.ok) return [];
-    const data = await resp.json() as any;
+    const data: unknown = await resp.json();
     if (!Array.isArray(data)) return [];
-    return data.map((item: any) => ({
-      name: item.name,
-      path: item.path,
-      type: item.type === 'dir' ? 'dir' : 'file',
+    return data.map((item: Record<string, unknown>) => ({
+      name: String(item.name ?? ''),
+      path: String(item.path ?? ''),
+      type: (item.type === 'dir' ? 'dir' : 'file') as 'file' | 'dir',
     }));
   } catch {
     return [];
@@ -81,8 +81,8 @@ async function readGitHubFile(
   try {
     const resp = await ghFetch(url, token);
     if (!resp.ok) return null;
-    const data = await resp.json() as any;
-    if (data.encoding === 'base64' && data.content) {
+    const data = await resp.json() as Record<string, unknown>;
+    if (data.encoding === 'base64' && typeof data.content === 'string') {
       return atob(data.content.replace(/\n/g, ''));
     }
     if (typeof data.content === 'string') return data.content;
@@ -139,14 +139,14 @@ function validateConfig(raw: unknown): { config: MCPServerConfig | null; error: 
 }
 
 function inferConfigFromPackageJson(pkgRaw: string): { config: MCPServerConfig | null; error: string | null } {
-  let parsed: any;
+  let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(pkgRaw);
+    parsed = JSON.parse(pkgRaw) as Record<string, unknown>;
   } catch {
     return { config: null, error: 'package.json is not valid JSON' };
   }
 
-  const scripts = parsed?.scripts;
+  const scripts = parsed.scripts as Record<string, unknown> | undefined;
   if (!scripts || typeof scripts !== 'object') {
     return { config: null, error: 'package.json has no scripts' };
   }
@@ -201,7 +201,7 @@ async function getPackageDescription(
   const pkgRaw = await readGitHubFile(owner, repo, `${serverPath}/package.json`, branch, ghToken);
   if (!pkgRaw) return undefined;
   try {
-    const pkg = JSON.parse(pkgRaw);
+    const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
     return typeof pkg.description === 'string' ? pkg.description : undefined;
   } catch {
     return undefined;
@@ -222,8 +222,9 @@ async function probeRemoteEndpoint(url: string): Promise<{ reachable: boolean; d
       return { reachable: true, detail: `Responded ${resp.status}` };
     }
     return { reachable: false, detail: `HTTP ${resp.status} ${resp.statusText}` };
-  } catch (e: any) {
-    const msg = e?.name === 'AbortError' ? 'Timeout (5s)' : (e?.message || 'Connection failed');
+  } catch (e: unknown) {
+    const err = e instanceof Error ? e : null;
+    const msg = err?.name === 'AbortError' ? 'Timeout (5s)' : (err?.message || 'Connection failed');
     return { reachable: false, detail: msg };
   }
 }
@@ -419,6 +420,75 @@ export function loadEffectiveMCPConfig(
 }
 
 // ---------------------------------------------------------------------------
+// Merge config-declared (external) MCP servers
+// ---------------------------------------------------------------------------
+
+/**
+ * Merge externally declared MCP servers (from DA config `mcp-servers` key)
+ * into a discovery result. Config servers override repo-discovered servers
+ * on ID conflict. Remote servers are probed for reachability.
+ */
+export async function mergeConfigServers(
+  discovery: DiscoveredMCP,
+  configServers: Record<string, unknown>,
+): Promise<DiscoveredMCP> {
+  const result: DiscoveredMCP = {
+    ...discovery,
+    mcpServers: { ...discovery.mcpServers },
+    warnings: [...discovery.warnings],
+    servers: [...discovery.servers],
+  };
+
+  for (const [id, raw] of Object.entries(configServers)) {
+    const idError = validateServerId(id);
+    if (idError) {
+      result.warnings.push({ serverId: id, message: idError });
+      result.servers.push({ id, sourcePath: 'da-config', status: 'error', statusDetail: idError });
+      continue;
+    }
+
+    const { config, error } = validateConfig(raw);
+    if (!config || error) {
+      const msg = error ?? 'Invalid MCP server config';
+      result.warnings.push({ serverId: id, message: msg });
+      result.servers.push({ id, sourcePath: 'da-config', status: 'error', statusDetail: msg });
+      continue;
+    }
+
+    // Remove any repo-discovered entry with the same ID (config wins)
+    result.servers = result.servers.filter((s) => s.id !== id);
+
+    if (isRemoteConfig(config)) {
+      const probe = await probeRemoteEndpoint(config.url);
+      result.mcpServers[id] = config;
+      result.servers.push({
+        id,
+        sourcePath: 'da-config',
+        status: probe.reachable ? 'reachable' : 'unreachable',
+        transport: config.type,
+        endpoint: config.url,
+        statusDetail: probe.detail,
+      });
+    } else if (isStdioConfig(config)) {
+      result.mcpServers[id] = config;
+      result.servers.push({
+        id,
+        sourcePath: 'da-config',
+        status: 'ok',
+        transport: 'stdio',
+        endpoint: `${config.command} ${(config.args ?? []).join(' ')}`.trim(),
+        statusDetail: 'Configured via DA config (stdio — requires local runtime)',
+      });
+    } else {
+      result.mcpServers[id] = config;
+      result.servers.push({ id, sourcePath: 'da-config', status: 'ok' });
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Cache I/O via DAAdminClient
 // ---------------------------------------------------------------------------
 
@@ -431,7 +501,7 @@ export async function readDiscoveryCache(
 ): Promise<DiscoveredMCP | null> {
   try {
     const source = await client.getSource(org, repo, CACHE_PATH);
-    const raw = typeof source === 'string' ? source : (source as any).content;
+    const raw = typeof source === 'string' ? source : (source as unknown as { content: string }).content;
     return JSON.parse(raw) as DiscoveredMCP;
   } catch {
     return null;
