@@ -272,7 +272,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   const edsClient = imsToken
     ? new EDSAdminClient({ apiToken: imsToken })
-    : undefined;
+    : null;
 
   const daTools = createDATools(daClient, {
     pageContext: pageContext ?? undefined,

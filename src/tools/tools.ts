@@ -27,7 +27,7 @@ export type PageContext = {
 export type DAToolsOptions = {
   pageContext?: PageContext;
   collab?: CollabClient | null;
-  edsClient?: EDSAdminClient;
+  edsClient?: EDSAdminClient | null;
 };
 
 function useCollabForDoc(
