@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/adobe-rnd/da-agent/compare/v1.4.2...v1.5.0) (2026-03-25)
+
+
+### Features
+
+* add human message to edit tool ([cac7abb](https://github.com/adobe-rnd/da-agent/commit/cac7abb864f0cd9d72a29f128332bf267e280839))
+
 ## [1.4.2](https://github.com/adobe-rnd/da-agent/compare/v1.4.1...v1.4.2) (2026-03-25)
 
 
