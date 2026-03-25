@@ -6,6 +6,7 @@ import {
 } from 'ai';
 import { z } from 'zod';
 import { DAAdminClient } from './da-admin/client.js';
+import { EDSAdminClient } from './eds-admin/client.js';
 import { createDATools } from './tools/tools.js';
 import { ensureHtmlExtension } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
@@ -269,12 +270,15 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ? new DAAdminClient({ apiToken: imsToken, daadminService: env.DAADMIN })
     : null;
 
-  const daTools = daClient
-    ? createDATools(daClient, {
-      pageContext: pageContext ?? undefined,
-      collab: collab ?? undefined,
-    })
-    : {};
+  const edsClient = imsToken
+    ? new EDSAdminClient({ apiToken: imsToken })
+    : undefined;
+
+  const daTools = createDATools(daClient, {
+    pageContext: pageContext ?? undefined,
+    collab: collab ?? undefined,
+    edsClient,
+  });
 
   const skills = daClient && pageContext
     ? await loadSkills(daClient, pageContext.org, pageContext.site)
