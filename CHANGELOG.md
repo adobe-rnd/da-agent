@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/adobe-rnd/da-agent/compare/v1.2.2...v1.3.0) (2026-03-25)
+
+
+### Features
+
+* add client-side only tools ([9bc5be7](https://github.com/adobe-rnd/da-agent/commit/9bc5be718914e7e8cc44b4647d6286078db7099d))
+
 ## [1.2.2](https://github.com/adobe-rnd/da-agent/compare/v1.2.1...v1.2.2) (2026-03-25)
 
 
