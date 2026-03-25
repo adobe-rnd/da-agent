@@ -29,7 +29,7 @@ ENVIRONMENT = "ci"
 VERSION = "@@VERSION@@-ci"
 RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
-LANGFUSE_BASEURL = "https://mystique-langfuse-prod.corp.ethos117-prod-va6.ethos.adobe.net/"
+LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 
 # ----------------------------------------------------------------------
 # production environment
@@ -47,7 +47,7 @@ ENVIRONMENT = "production"
 VERSION = "@@VERSION@@"
 RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
-LANGFUSE_BASEURL = "https://mystique-langfuse-prod.corp.ethos117-prod-va6.ethos.adobe.net/"
+LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 
 # ----------------------------------------------------------------------
 # dev environment (local)
@@ -65,4 +65,4 @@ ENVIRONMENT = "dev"
 VERSION="0.0.0-dev"
 RETURN_STACK_TRACES = "true"
 DA_ORIGIN = "http://localhost:8787"
-LANGFUSE_BASEURL = "https://mystique-langfuse-prod.corp.ethos117-prod-va6.ethos.adobe.net/"
+LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
