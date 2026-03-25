@@ -29,6 +29,9 @@ ENVIRONMENT = "ci"
 VERSION = "@@VERSION@@-ci"
 RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
+LANGFUSE_PUBLIC_KEY = ""
+LANGFUSE_SECRET_KEY = ""
+LANGFUSE_BASEURL = ""
 
 # ----------------------------------------------------------------------
 # production environment
@@ -46,6 +49,9 @@ ENVIRONMENT = "production"
 VERSION = "@@VERSION@@"
 RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
+LANGFUSE_PUBLIC_KEY = ""
+LANGFUSE_SECRET_KEY = ""
+LANGFUSE_BASEURL = ""
 
 # ----------------------------------------------------------------------
 # dev environment (local)
@@ -63,3 +69,6 @@ ENVIRONMENT = "dev"
 VERSION="0.0.0-dev"
 RETURN_STACK_TRACES = "true"
 DA_ORIGIN = "http://localhost:8787"
+LANGFUSE_PUBLIC_KEY = ""
+LANGFUSE_SECRET_KEY = ""
+LANGFUSE_BASEURL = ""

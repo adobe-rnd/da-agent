@@ -10,6 +10,7 @@ import { EDSAdminClient } from './eds-admin/client.js';
 import { createCanvasClientTools, createDATools, createEDSTools } from './tools/tools.js';
 import { ensureHtmlExtension } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
+import { initTelemetry, flushTelemetry } from './telemetry.js';
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -249,6 +250,8 @@ function expandUserSelectionContextForModel(messages: any[]): any[] {
 }
 
 async function handleChat(request: Request, env: Env): Promise<Response> {
+  initTelemetry(env);
+
   let body: unknown;
   try {
     body = await request.json();
@@ -307,13 +310,23 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       console.error('streamText error:', JSON.stringify(error));
       collab?.disconnect();
     },
-    onFinish: () => {
+    onFinish: async () => {
+      await flushTelemetry();
       collab?.disconnect();
     },
     system: buildSystemPrompt(pageContext, skills),
     messages: modelMessages as ModelMessage[],
     tools,
     stopWhen: stepCountIs(5),
+    experimental_telemetry: {
+      isEnabled: true,
+      functionId: 'da-agent-chat',
+      metadata: {
+        org: pageContext?.org ?? 'unknown',
+        site: pageContext?.site ?? 'unknown',
+        path: pageContext?.path ?? 'unknown',
+      },
+    },
   });
 
   const streamResponse = result.toUIMessageStreamResponse();
