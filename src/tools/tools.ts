@@ -163,12 +163,20 @@ export function createDATools(client: DAAdminClient | null, options?: DAToolsOpt
         + 'with all page content wrapped in <main> inside <body>. '
         + 'Separate sections with <hr>, represent EDS blocks as <div class="block-name"> elements where each '
         + 'content row is a child <div> and each column a nested <div>, use proper semantic HTML elements '
-        + '(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks.',
+        + '(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks. '
+        + 'Always set humanReadableSummary to a short, clear explanation of what you changed (sections added/removed, '
+        + 'copy edits, block changes, etc.) so the user can approve without reading the full HTML.',
       inputSchema: z.object({
         org: z.string().describe('Organization name'),
         repo: z.string().describe('Repository name'),
         path: z.string().describe('Path to the file to update'),
         content: z.string().describe('New content for the file'),
+        humanReadableSummary: z
+          .string()
+          .describe(
+            'Brief plain-language summary of edits for the user (bullet-style or sentences). '
+              + 'No HTML; describe what changed, not the raw markup.',
+          ),
         contentType: z.string().optional().describe('Optional content type'),
       }),
       needsApproval: async () => true,
