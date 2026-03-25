@@ -1,3 +1,11 @@
+## [1.4.1](https://github.com/adobe-rnd/da-agent/compare/v1.4.0...v1.4.1) (2026-03-25)
+
+
+### Bug Fixes
+
+* update default Langfuse URL in telemetry test ([50069d0](https://github.com/adobe-rnd/da-agent/commit/50069d0c3aeb34a3769accecccad515ccfce264f))
+* use Langfuse secrets instead of vars, set Adobe Langfuse URL ([f283e77](https://github.com/adobe-rnd/da-agent/commit/f283e77a6b70b7cf6dc0746d4dbcb7d8c72286a8))
+
 # [1.4.0](https://github.com/adobe-rnd/da-agent/compare/v1.3.0...v1.4.0) (2026-03-25)
 
 
