@@ -1,7 +1,6 @@
 /**
  * DA Tools
  * Vercel AI SDK tool definitions wrapping DAAdminClient
- * When in edit view with a collab session, read/write the current doc via the shared Y doc.
  */
 
 import { tool } from 'ai';
@@ -10,6 +9,13 @@ import type { DAAdminClient } from '../da-admin/client';
 import type { DAAPIError } from '../da-admin/types';
 import type { CollabClient } from '../collab-client';
 import { ensureHtmlExtension } from './utils';
+import {
+  ReplaceTextSchema,
+  InsertElementSchema,
+  DeleteElementSchema,
+  ReplaceElementSchema,
+  UpdateAttributeSchema,
+} from './operations.js';
 
 function isDAAPIError(e: unknown): e is DAAPIError {
   return typeof e === 'object' && e !== null && 'status' in e && 'message' in e;
@@ -26,27 +32,6 @@ export type DAToolsOptions = {
   pageContext?: PageContext;
   collab?: CollabClient | null;
 };
-
-function useCollabForDoc(
-  org: string,
-  repo: string,
-  path: string,
-  options?: DAToolsOptions,
-): boolean {
-  if (!options?.pageContext || !options?.collab?.isConnected) return false;
-  const {
-    org: ctxOrg,
-    site: ctxSite,
-    path: ctxPath,
-    view,
-  } = options.pageContext;
-  if (view !== 'edit') return false;
-  return (
-    ctxOrg === org
-    && ctxSite === repo
-    && ensureHtmlExtension(ctxPath) === ensureHtmlExtension(path)
-  );
-}
 
 export function createDATools(client: DAAdminClient, options?: DAToolsOptions) {
   const opts = options;
@@ -67,38 +52,6 @@ export function createDATools(client: DAAdminClient, options?: DAToolsOptions) {
       execute: async ({ org, repo, path }) => {
         try {
           return await client.listSources(org, repo, path);
-        } catch (e) {
-          if (isDAAPIError(e)) return { error: e.message, status: e.status };
-          return { error: String(e) };
-        }
-      },
-    }),
-
-    da_get_source: tool({
-      description:
-        'Get the content of a specific source file from a DA repository. Returns the file content and metadata.',
-      inputSchema: z.object({
-        org: z.string().describe('Organization name'),
-        repo: z.string().describe('Repository name'),
-        path: z
-          .string()
-          .describe(
-            'Path to the file within the repository (e.g., "docs/index.md")',
-          ),
-      }),
-      execute: async ({ org, repo, path }) => {
-        try {
-          if (useCollabForDoc(org, repo, path, opts) && opts?.collab) {
-            const content = opts.collab.getContent();
-            if (content != null) {
-              return {
-                path: ensureHtmlExtension(path),
-                content,
-                source: 'collab',
-              };
-            }
-          }
-          return await client.getSource(org, repo, ensureHtmlExtension(path));
         } catch (e) {
           if (isDAAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };
@@ -130,7 +83,7 @@ export function createDATools(client: DAAdminClient, options?: DAToolsOptions) {
             'Optional content type (e.g., "text/markdown", "text/html")',
           ),
       }),
-      needsApproval: async () => true,
+      needsApproval: async () => false,
       execute: async ({
         org, repo, path, content, contentType,
       }) => {
@@ -149,41 +102,6 @@ export function createDATools(client: DAAdminClient, options?: DAToolsOptions) {
       },
     }),
 
-    da_update_source: tool({
-      description:
-        'Update an existing source file in a DA repository with new content. '
-        + 'Content MUST be a plain HTML string (no CDATA, no markdown fences) starting with <body> and ending with </body>, '
-        + 'with all page content wrapped in <main> inside <body>. '
-        + 'Separate sections with <hr>, represent EDS blocks as <div class="block-name"> elements where each '
-        + 'content row is a child <div> and each column a nested <div>, use proper semantic HTML elements '
-        + '(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks.',
-      inputSchema: z.object({
-        org: z.string().describe('Organization name'),
-        repo: z.string().describe('Repository name'),
-        path: z.string().describe('Path to the file to update'),
-        content: z.string().describe('New content for the file'),
-        contentType: z.string().optional().describe('Optional content type'),
-      }),
-      needsApproval: async () => true,
-      execute: async ({
-        org, repo, path, content, contentType,
-      }) => {
-        const pathWithExt = ensureHtmlExtension(path);
-        try {
-          if (useCollabForDoc(org, repo, path, opts) && opts?.collab) {
-            opts.collab.applyContent(content);
-            await client.updateSource(org, repo, pathWithExt, content, contentType, { initiator: 'collab' });
-            opts.collab.disconnect();
-            return { path: pathWithExt, source: 'collab', updated: true };
-          }
-          return await client.updateSource(org, repo, pathWithExt, content, contentType);
-        } catch (e) {
-          if (isDAAPIError(e)) return { error: e.message, status: e.status };
-          return { error: String(e) };
-        }
-      },
-    }),
-
     da_delete_source: tool({
       description:
         'Delete a source file from a DA repository. Use with caution as this operation cannot be undone.',
@@ -192,7 +110,7 @@ export function createDATools(client: DAAdminClient, options?: DAToolsOptions) {
         repo: z.string().describe('Repository name'),
         path: z.string().describe('Path to the file to delete'),
       }),
-      needsApproval: async () => true,
+      needsApproval: async () => false,
       execute: async ({ org, repo, path }) => {
         try {
           return await client.deleteSource(org, repo, ensureHtmlExtension(path));
@@ -242,7 +160,7 @@ export function createDATools(client: DAAdminClient, options?: DAToolsOptions) {
           .string()
           .describe('Path where the file should be moved to'),
       }),
-      needsApproval: async () => true,
+      needsApproval: async () => false,
       execute: async ({
         org, repo, sourcePath, destinationPath,
       }) => {
@@ -332,6 +250,185 @@ export function createDATools(client: DAAdminClient, options?: DAToolsOptions) {
       execute: async ({ org, repo, fragmentPath }) => {
         try {
           return await client.lookupFragment(org, repo, fragmentPath);
+        } catch (e) {
+          if (isDAAPIError(e)) return { error: e.message, status: e.status };
+          return { error: String(e) };
+        }
+      },
+    }),
+
+    da_read_content: tool({
+      description: 'Read the current HTML content of the page open in the editor. '
+        + 'Always call this first in edit view to understand the document structure before making any changes.',
+      inputSchema: z.object({
+        org: z.string().describe('Organization name'),
+        repo: z.string().describe('Repository name'),
+        path: z.string().describe('Path to the file'),
+      }),
+      needsApproval: async () => false,
+      execute: async ({ path }) => {
+        const pathWithExt = ensureHtmlExtension(path);
+        try {
+          if (opts?.collab?.isConnected) {
+            const results = await opts.collab.applyOperations([{ type: 'read_content' }]);
+            return { path: pathWithExt, source: 'collab', results };
+          }
+          return { error: 'da_read_content requires an active collab session (edit view only).' };
+        } catch (e) {
+          if (isDAAPIError(e)) return { error: e.message, status: e.status };
+          return { error: String(e) };
+        }
+      },
+    }),
+
+    da_replace_text: tool({
+      description: 'Find a text string in the document and replace it with new text. '
+        + 'Moves the AI cursor to the target location and simulates character-by-character typing '
+        + 'so collaborators can follow along in real time. '
+        + 'Use nth to target a specific occurrence when the text appears multiple times.',
+      inputSchema: z.object({
+        org: z.string().describe('Organization name'),
+        repo: z.string().describe('Repository name'),
+        path: z.string().describe('Path to the file'),
+        ...ReplaceTextSchema.omit({ type: true }).shape,
+      }),
+      needsApproval: async () => false,
+      execute: async ({
+        path, find, replace, nth,
+      }) => {
+        const pathWithExt = ensureHtmlExtension(path);
+        try {
+          if (opts?.collab?.isConnected) {
+            const results = await opts.collab.applyOperations([{
+              type: 'replace_text', find, replace, nth,
+            }]);
+            return { path: pathWithExt, source: 'collab', results };
+          }
+          return { error: 'da_replace_text requires an active collab session (edit view only).' };
+        } catch (e) {
+          if (isDAAPIError(e)) return { error: e.message, status: e.status };
+          return { error: String(e) };
+        }
+      },
+    }),
+
+    da_insert_element: tool({
+      description: 'Insert a new HTML element (paragraph, heading, block, list, etc.) before or after an anchor element. '
+        + 'anchor is a distinctive substring of the neighbouring element\'s text. '
+        + 'anchorType narrows the match by CSS selector (e.g. "h2", "p", "div.hero"). '
+        + 'anchorIndex (1-based) selects which matching element when several match.',
+      inputSchema: z.object({
+        org: z.string().describe('Organization name'),
+        repo: z.string().describe('Repository name'),
+        path: z.string().describe('Path to the file'),
+        ...InsertElementSchema.omit({ type: true }).shape,
+      }),
+      needsApproval: async () => false,
+      execute: async ({
+        path, anchor, insertPosition, html, anchorType, anchorIndex,
+      }) => {
+        const pathWithExt = ensureHtmlExtension(path);
+        try {
+          if (opts?.collab?.isConnected) {
+            const results = await opts.collab.applyOperations([{
+              type: 'insert_element', anchor, insertPosition, html, anchorType, anchorIndex,
+            }]);
+            return { path: pathWithExt, source: 'collab', results };
+          }
+          return { error: 'da_insert_element requires an active collab session (edit view only).' };
+        } catch (e) {
+          if (isDAAPIError(e)) return { error: e.message, status: e.status };
+          return { error: String(e) };
+        }
+      },
+    }),
+
+    da_delete_element: tool({
+      description: 'Delete an element (paragraph, heading, block, etc.) identified by its text content. '
+        + 'anchor is a distinctive substring of the element to remove. '
+        + 'anchorType narrows the match by CSS selector. '
+        + 'anchorIndex (1-based) selects which occurrence when several match.',
+      inputSchema: z.object({
+        org: z.string().describe('Organization name'),
+        repo: z.string().describe('Repository name'),
+        path: z.string().describe('Path to the file'),
+        ...DeleteElementSchema.omit({ type: true }).shape,
+      }),
+      needsApproval: async () => false,
+      execute: async ({
+        path, anchor, anchorType, anchorIndex,
+      }) => {
+        const pathWithExt = ensureHtmlExtension(path);
+        try {
+          if (opts?.collab?.isConnected) {
+            const results = await opts.collab.applyOperations([{
+              type: 'delete_element', anchor, anchorType, anchorIndex,
+            }]);
+            return { path: pathWithExt, source: 'collab', results };
+          }
+          return { error: 'da_delete_element requires an active collab session (edit view only).' };
+        } catch (e) {
+          if (isDAAPIError(e)) return { error: e.message, status: e.status };
+          return { error: String(e) };
+        }
+      },
+    }),
+
+    da_replace_element: tool({
+      description: 'Replace an entire element with new HTML. '
+        + 'anchor is a distinctive substring of the element to replace. '
+        + 'anchorType narrows the match by CSS selector. '
+        + 'anchorIndex (1-based) selects which occurrence when several match.',
+      inputSchema: z.object({
+        org: z.string().describe('Organization name'),
+        repo: z.string().describe('Repository name'),
+        path: z.string().describe('Path to the file'),
+        ...ReplaceElementSchema.omit({ type: true }).shape,
+      }),
+      needsApproval: async () => false,
+      execute: async ({
+        path, anchor, html, anchorType, anchorIndex,
+      }) => {
+        const pathWithExt = ensureHtmlExtension(path);
+        try {
+          if (opts?.collab?.isConnected) {
+            const results = await opts.collab.applyOperations([{
+              type: 'replace_element', anchor, html, anchorType, anchorIndex,
+            }]);
+            return { path: pathWithExt, source: 'collab', results };
+          }
+          return { error: 'da_replace_element requires an active collab session (edit view only).' };
+        } catch (e) {
+          if (isDAAPIError(e)) return { error: e.message, status: e.status };
+          return { error: String(e) };
+        }
+      },
+    }),
+
+    da_update_attribute: tool({
+      description: 'Set or update an HTML attribute on an element (e.g. href, src, alt, class). '
+        + 'anchor is a distinctive substring of the target element\'s text or attribute value. '
+        + 'anchorType narrows the match by CSS selector (e.g. "a", "img"). '
+        + 'anchorIndex (1-based) selects which occurrence when several match.',
+      inputSchema: z.object({
+        org: z.string().describe('Organization name'),
+        repo: z.string().describe('Repository name'),
+        path: z.string().describe('Path to the file'),
+        ...UpdateAttributeSchema.omit({ type: true }).shape,
+      }),
+      needsApproval: async () => false,
+      execute: async ({
+        path, anchor, attribute, value, anchorType, anchorIndex,
+      }) => {
+        const pathWithExt = ensureHtmlExtension(path);
+        try {
+          if (opts?.collab?.isConnected) {
+            const results = await opts.collab.applyOperations([{
+              type: 'update_attribute', anchor, attribute, value, anchorType, anchorIndex,
+            }]);
+            return { path: pathWithExt, source: 'collab', results };
+          }
+          return { error: 'da_update_attribute requires an active collab session (edit view only).' };
         } catch (e) {
           if (isDAAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };

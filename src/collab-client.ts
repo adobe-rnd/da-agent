@@ -5,14 +5,38 @@
  * - Sets awareness state (purple cursor, "AI Assistant (username)")
  * - Read/write document content via getContent() and applyContent(html) using
  *   doc2aem / aem2doc from @da-tools/da-parser (same Y.Doc prosemirror fragment as editor)
+ * - Atomic document operations via applyOperations() — each operation moves the cursor
+ *   to the target element then applies a minimal DOM change visible to all collaborators
+ * - For replace_text: simulates human typing — moves cursor to target, shows selection,
+ *   deletes old text, then inserts new text character by character with delays
  * - Disconnects after request completes (or after applyContent when writing)
  */
 
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
-import { aem2doc, doc2aem } from '@da-tools/da-parser';
+import { aem2doc, doc2aem, getSchema } from '@da-tools/da-parser';
+import {
+  absolutePositionToRelativePosition,
+  initProseMirrorDoc,
+} from 'y-prosemirror';
+import { parseHTML as linkedomParseHTML } from 'linkedom';
+import type {
+  DocumentOperation,
+  InsertElementOperation,
+  OperationResult,
+} from './tools/operations.js';
+import { applyOperation } from './tools/dom-operations.js';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 type ActivityState = 'connected' | 'thinking' | 'previewing' | 'done';
+
+// Set to true to enable verbose debug logging for cursor / Y.js diagnostics.
+const DEBUG = true;
+
+const dbg = (...args: any[]) => {
+  if (DEBUG) console.log('[CollabClient:debug]', ...args);
+};
 
 /**
  * Creates a WebSocket class that establishes connections via a Cloudflare service binding.
@@ -139,6 +163,12 @@ export class CollabClient {
     this.binding = binding;
   }
 
+  private static sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
   /**
    * Connect to da-collab and set AI presence
    */
@@ -156,7 +186,8 @@ export class CollabClient {
     const WSClass = createServiceBindingWSClass(this.binding);
 
     this.provider = new WebsocketProvider(
-      'https://da-collab',
+      // 'https://da-collab',
+      'http://localhost:4711',
       this.docPath,
       this.ydoc,
       {
@@ -186,7 +217,6 @@ export class CollabClient {
           this.status = 'connected';
           console.log(`[CollabClient] Joined collab session: ${this.docPath} as "${this.userName}"`);
           this.setAwarenessState('connected');
-          this.setCursorAtStart();
           resolve();
         }
       });
@@ -244,7 +274,7 @@ export class CollabClient {
         head: relJson,
       });
 
-      console.log('[CollabClient] Cursor set to start (fragment: prosemirror)');
+      dbg('setCursorAtStart: set cursor to fragment start, relJson=', JSON.stringify(relJson));
     } catch (error) {
       console.warn('[CollabClient] Failed to set cursor at start:', error);
     }
@@ -275,6 +305,554 @@ export class CollabClient {
       });
       aem2doc(html, this.ydoc!);
     });
+  }
+
+  /**
+   * Move the AI cursor to the Nth block element in the document.
+   * Uses the real mapping from initProseMirrorDoc so positions resolve correctly in the editor.
+   * Must be called AFTER any Y.doc transact so the positions point to live Y.js items.
+   */
+  setCursorAtElement(elementIndex: number): void {
+    if (!this.provider?.awareness || !this.ydoc) return;
+    try {
+      const schema = getSchema();
+      const type = this.ydoc.getXmlFragment('prosemirror');
+      const { doc, mapping } = initProseMirrorDoc(type, schema);
+
+      dbg(`setCursorAtElement(${elementIndex}): mapping.size=${mapping.size}, doc.childCount=${doc.childCount}`);
+
+      // Walk the document to find the ProseMirror position of the start of block N.
+      // Position 1 = inside the first block's opening node.
+      let pos = 1;
+      for (let i = 0; i < elementIndex && i < doc.childCount; i += 1) {
+        pos += doc.child(i).nodeSize;
+      }
+      pos = Math.min(pos, doc.content.size);
+
+      const anchor = absolutePositionToRelativePosition(pos, type, mapping as any);
+      const anchorJson = Y.relativePositionToJSON(anchor);
+
+      dbg(`setCursorAtElement(${elementIndex}): pmPos=${pos}, relJson=${JSON.stringify(anchorJson)}`);
+
+      this.provider.awareness.setLocalStateField('cursor', {
+        anchor: anchorJson,
+        head: anchorJson,
+      });
+      console.log(`[CollabClient] Cursor moved to block ${elementIndex} (pmPos=${pos})`);
+    } catch (err) {
+      console.warn('[CollabClient] Failed to set cursor at element:', err);
+      this.setCursorAtStart(); // Fallback to document start
+    }
+  }
+
+  /**
+   * Set cursor (and optionally a selection range) using exact ProseMirror positions.
+   * When from !== to, collaborators see a highlighted selection range — used to show
+   * which text the agent is about to change.
+   * Requires the mapping returned by initProseMirrorDoc for accurate Y.js relative positions.
+   */
+  private setCursorAtPmPosition(
+    from: number,
+    to: number,
+    mapping: Map<any, any>,
+    type: Y.XmlFragment,
+  ): void {
+    if (!this.provider?.awareness) return;
+    try {
+      const anchor = absolutePositionToRelativePosition(from, type, mapping as any);
+      const head = absolutePositionToRelativePosition(to, type, mapping as any);
+      const anchorJson = Y.relativePositionToJSON(anchor);
+      const headJson = Y.relativePositionToJSON(head);
+
+      dbg(
+        `setCursorAtPmPosition: from=${from} to=${to}`,
+        `anchor=${JSON.stringify(anchorJson)}`,
+        `head=${JSON.stringify(headJson)}`,
+      );
+
+      this.provider.awareness.setLocalStateField('cursor', {
+        anchor: anchorJson,
+        head: headJson,
+      });
+    } catch (err) {
+      console.warn('[CollabClient] setCursorAtPmPosition failed:', err);
+    }
+  }
+
+  /**
+   * Log the full Y.XmlFragment tree for debugging.
+   */
+  private dumpYXmlFragment(): void {
+    if (!this.ydoc) return;
+    const frag = this.ydoc.getXmlFragment('prosemirror');
+    const children = (frag as any).toArray();
+    dbg(`Y.XmlFragment 'prosemirror' has ${children.length} top-level child(ren):`);
+    children.forEach((child: any, i: number) => {
+      const ctor = child?.constructor?.name ?? 'unknown';
+      if (child instanceof Y.XmlText) {
+        const plain = child.toDelta().map((d: any) => d.insert).join('');
+        dbg(`  [${i}] Y.XmlText (${child._length} chars) plain="${plain.slice(0, 80)}"`);
+      } else if (child instanceof Y.XmlElement) {
+        const grandChildren = (child as any).toArray();
+        dbg(`  [${i}] Y.XmlElement(${child.nodeName}) with ${grandChildren.length} child(ren):`);
+        grandChildren.forEach((gc: any, j: number) => {
+          const gcCtor = gc?.constructor?.name ?? 'unknown';
+          if (gc instanceof Y.XmlText) {
+            const plain = gc.toDelta().map((d: any) => d.insert).join('');
+            dbg(`    [${j}] Y.XmlText (${gc._length} chars) plain="${plain.slice(0, 80)}"`);
+          } else {
+            dbg(`    [${j}] ${gcCtor} (nodeName=${gc.nodeName ?? 'n/a'})`);
+          }
+        });
+      } else {
+        dbg(`  [${i}] ${ctor}`);
+      }
+    });
+  }
+
+  /**
+   * Walk the Y.XmlFragment tree to find the Y.XmlText node containing the nth occurrence
+   * of `find`. Returns the node and the character offset within it where `find` starts.
+   *
+   * Uses toDelta() to get the PLAIN TEXT content (not toString() which embeds XML markup).
+   * Returns null if not found (e.g. text spans multiple Y.XmlText nodes due to formatting).
+   */
+  private findYXmlText(
+    find: string,
+    nth: number,
+  ): { ytext: Y.XmlText; charOffset: number } | null {
+    if (!this.ydoc) return null;
+    const frag = this.ydoc.getXmlFragment('prosemirror');
+    let count = 0;
+
+    type YXmlTextResult = { ytext: Y.XmlText; charOffset: number };
+    const walk = (node: Y.XmlFragment | Y.XmlElement): YXmlTextResult | null => {
+      for (const child of (node as any).toArray()) {
+        if (child instanceof Y.XmlText) {
+          // Use toDelta() for plain text — toString() embeds XML markup for formatted runs
+          const plain = child.toDelta().map((d: any) => d.insert as string).join('');
+          const idx = plain.indexOf(find);
+          dbg(
+            `findYXmlText: checking Y.XmlText (${child._length} chars),`,
+            `plain[0..60]="${plain.slice(0, 60)}", indexOf("${find.slice(0, 30)}")=${idx}`,
+          );
+          if (idx >= 0) {
+            count += 1;
+            if (count === nth) {
+              dbg(`findYXmlText: FOUND at occurrence ${nth}, charOffset=${idx}`);
+              return { ytext: child, charOffset: idx };
+            }
+          }
+        } else if (child instanceof Y.XmlElement) {
+          const result = walk(child);
+          if (result) return result;
+        }
+      }
+      return null;
+    };
+
+    const result = walk(frag);
+    if (!result) {
+      dbg(`findYXmlText: "${find.slice(0, 40)}" NOT found in Y.XmlFragment (nth=${nth})`);
+    }
+    return result;
+  }
+
+  /**
+   * Find the index of the top-level Y.XmlFragment child whose subtree contains the anchor text.
+   * Returns -1 if not found.
+   */
+  private findFragmentChildIndex(anchor: string, anchorIndex = 1): number {
+    if (!this.ydoc) return -1;
+    const frag = this.ydoc.getXmlFragment('prosemirror');
+    const children = (frag as any).toArray();
+
+    const getNodeText = (node: any): string => {
+      if (node instanceof Y.XmlText) {
+        return node.toDelta().map((d: any) => d.insert as string).join('');
+      }
+      if (node instanceof Y.XmlElement) {
+        return (node as any).toArray().map(getNodeText).join('');
+      }
+      return '';
+    };
+
+    let count = 0;
+    for (let i = 0; i < children.length; i += 1) {
+      if (getNodeText(children[i]).includes(anchor)) {
+        count += 1;
+        if (count === anchorIndex) {
+          dbg(`findFragmentChildIndex: found "${anchor.slice(0, 40)}" at index=${i} (occ ${anchorIndex})`);
+          return i;
+        }
+      }
+    }
+    dbg(`findFragmentChildIndex: "${anchor.slice(0, 40)}" NOT found`);
+    return -1;
+  }
+
+  /**
+   * Extract plain text content from an HTML fragment string using DOMParser.
+   */
+  private static extractTextFromHtml(html: string): string {
+    const fullDoc = `<!DOCTYPE html><html><head></head><body>${html}</body></html>`;
+    const { document: dom } = linkedomParseHTML(fullDoc) as any;
+    return (dom.body?.textContent ?? '') as string;
+  }
+
+  /**
+   * Simulate human-like element insertion for insert_element operations:
+   *   1. Move cursor to the anchor element (collaborators see cursor jump)
+   *   2. Apply DOM change via aem2doc (new element appears in editor)
+   *   3. Delete the new element's text immediately (empty line visible)
+   *   4. Move cursor to the new empty element
+   *   5. Type the text one character at a time with delays (text appears as typed)
+   *
+   * For complex elements (no direct Y.XmlText child), skips the typing simulation
+   * but still pre-positions the cursor at the anchor before applying the change.
+   */
+  private async applyInsertElementWithTyping(
+    currentHtml: string,
+    op: InsertElementOperation,
+  ): Promise<{ success: boolean; newHtml: string; message: string }> {
+    if (!this.ydoc) {
+      return { success: false, newHtml: currentHtml, message: 'Not connected' };
+    }
+
+    dbg(
+      `applyInsertElementWithTyping: anchor="${op.anchor.slice(0, 40)}"`,
+      `pos=${op.insertPosition}, html="${op.html.slice(0, 60)}"`,
+    );
+    this.dumpYXmlFragment();
+
+    // Step 1: Find anchor in fragment and move cursor there (visible jump)
+    const anchorFragIdx = this.findFragmentChildIndex(op.anchor, op.anchorIndex ?? 1);
+    if (anchorFragIdx >= 0) {
+      this.setCursorAtElement(anchorFragIdx);
+      await CollabClient.sleep(75);
+    }
+
+    // Step 2: Apply DOM operation to get updated HTML
+    let domResult: ReturnType<typeof applyOperation>;
+    try {
+      domResult = applyOperation(currentHtml, op);
+    } catch (domErr) {
+      dbg(`applyInsertElementWithTyping: applyOperation THREW: ${String(domErr)}`);
+      return { success: false, newHtml: currentHtml, message: String(domErr) };
+    }
+    if (!domResult.success) {
+      dbg(`applyInsertElementWithTyping: DOM op failed: ${domResult.message}`);
+      return { success: false, newHtml: currentHtml, message: domResult.message };
+    }
+
+    // New element lands at blockIndex (before) or blockIndex+1 (after) in the block list
+    const newElementIndex = op.insertPosition === 'after'
+      ? domResult.blockIndex + 1
+      : domResult.blockIndex;
+    const insertText = CollabClient.extractTextFromHtml(op.html);
+    dbg(`applyInsertElementWithTyping: newElementIndex=${newElementIndex}, insertText="${insertText.slice(0, 60)}"`);
+
+    // Step 3: Apply aem2doc — new element appears in editor
+    this.ydoc.transact(() => {
+      const fragInner = this.ydoc!.getXmlFragment('prosemirror');
+      fragInner.delete(0, fragInner.length);
+      this.ydoc!.share.forEach((sharedType) => {
+        if (sharedType instanceof Y.Map) sharedType.clear();
+      });
+      aem2doc(domResult.newHtml, this.ydoc!);
+    });
+
+    // Step 4: If there's a direct Y.XmlText child in the new element, delete its text and retype
+    if (insertText && newElementIndex >= 0) {
+      const frag = this.ydoc.getXmlFragment('prosemirror');
+      const newEl = (frag as any).toArray()[newElementIndex];
+
+      if (newEl instanceof Y.XmlElement) {
+        const ytext = (newEl as any).toArray().find((c: any) => c instanceof Y.XmlText);
+        if (ytext) {
+          const currentPlain = ytext.toDelta().map((d: any) => d.insert as string).join('');
+          dbg(`applyInsertElementWithTyping: deleting ${currentPlain.length} chars, then retyping`);
+
+          // Delete all text in one transaction (text disappears, empty line visible)
+          this.ydoc.transact(() => {
+            ytext.delete(0, currentPlain.length);
+          });
+          this.setCursorAtElement(newElementIndex);
+          await CollabClient.sleep(75);
+
+          // Type each character one at a time — sequential awaits are intentional
+          /* eslint-disable no-await-in-loop */
+          for (let i = 0; i < insertText.length; i += 1) {
+            this.ydoc.transact(() => {
+              ytext.insert(i, insertText[i]);
+            });
+            await CollabClient.sleep(20);
+          }
+          /* eslint-enable no-await-in-loop */
+
+          dbg(`applyInsertElementWithTyping: typed ${insertText.length} chars`);
+        } else {
+          // Complex block — cursor set only, no typing animation
+          this.setCursorAtElement(newElementIndex);
+          dbg(`applyInsertElementWithTyping: complex element, cursor moved to ${newElementIndex}`);
+        }
+      }
+    }
+
+    const newHtml = this.getContent() ?? domResult.newHtml;
+    dbg(`applyInsertElementWithTyping: done, getContent()="${newHtml.slice(0, 200)}"`);
+    console.log(`[CollabClient] Inserted element ${op.insertPosition} "${op.anchor.slice(0, 40)}"`);
+    return { success: true, newHtml, message: domResult.message };
+  }
+
+  /**
+   * Simulate human-like text replacement for replace_text operations:
+   *   1. Move cursor to the start of the target text (collaborators see cursor jump)
+   *   2. Extend selection to cover the full old text (collaborators see it highlighted)
+   *   3. Pause briefly so the selection is visible
+   *   4. Delete the old text in one Y.js transaction (text disappears)
+   *   5. Insert the new text one character at a time with a short delay (text appears as typed)
+   *
+   * Falls back to full aem2doc rebuild if the target text is not found in the Y.XmlFragment
+   * (e.g. text spans multiple Y.XmlText nodes due to inline formatting marks).
+   */
+  private async applyReplaceTextWithTyping(
+    currentHtml: string,
+    find: string,
+    replace: string,
+    nth: number,
+  ): Promise<{ success: boolean; newHtml: string; message: string }> {
+    if (!this.ydoc) {
+      return { success: false, newHtml: currentHtml, message: 'Not connected' };
+    }
+
+    dbg(`applyReplaceTextWithTyping: find="${find.slice(0, 40)}", replace="${replace.slice(0, 40)}", nth=${nth}`);
+    this.dumpYXmlFragment();
+
+    // Find the Y.XmlText node containing the target text
+    const ytextResult = this.findYXmlText(find, nth);
+
+    if (!ytextResult) {
+      // Fallback: apply via DOM + aem2doc (handles cross-node spans)
+      dbg('applyReplaceTextWithTyping: falling back to DOM+aem2doc');
+      let domResult: ReturnType<typeof applyOperation>;
+      try {
+        domResult = applyOperation(currentHtml, {
+          type: 'replace_text', find, replace, nth,
+        });
+      } catch (domErr) {
+        dbg('applyReplaceTextWithTyping: applyOperation THREW:', String(domErr));
+        return { success: false, newHtml: currentHtml, message: String(domErr) };
+      }
+      if (domResult.success) {
+        this.ydoc.transact(() => {
+          const frag = this.ydoc!.getXmlFragment('prosemirror');
+          frag.delete(0, frag.length);
+          this.ydoc!.share.forEach((type) => {
+            if (type instanceof Y.Map) type.clear();
+          });
+          aem2doc(domResult.newHtml, this.ydoc!);
+        });
+        if (domResult.blockIndex >= 0) this.setCursorAtElement(domResult.blockIndex);
+        const preview = this.getContent()?.slice(0, 200);
+        dbg(`applyReplaceTextWithTyping: aem2doc fallback done, getContent()="${preview}"`);
+      } else {
+        dbg('applyReplaceTextWithTyping: DOM op also failed:', domResult.message);
+      }
+      return {
+        success: domResult.success,
+        newHtml: domResult.success ? (this.getContent() ?? domResult.newHtml) : domResult.newHtml,
+        message: domResult.message,
+      };
+    }
+
+    const { ytext, charOffset } = ytextResult;
+    dbg(`applyReplaceTextWithTyping: found Y.XmlText, charOffset=${charOffset}, ytext._length=${ytext._length}`);
+
+    // Compute ProseMirror positions of the target text for cursor/selection awareness
+    const schema = getSchema();
+    const type = this.ydoc.getXmlFragment('prosemirror');
+    const { doc, mapping } = initProseMirrorDoc(type, schema);
+    dbg(`applyReplaceTextWithTyping: initProseMirrorDoc mapping.size=${mapping.size}, doc.childCount=${doc.childCount}`);
+
+    let fromPm = -1;
+    let toPm = -1;
+    doc.descendants((node: any, pos: number) => {
+      if (fromPm >= 0) return false;
+      if (node.isText && typeof node.text === 'string') {
+        const idx = node.text.indexOf(find);
+        if (idx >= 0) {
+          fromPm = pos + idx;
+          toPm = fromPm + find.length;
+          dbg(`applyReplaceTextWithTyping: found PM text at pos=${pos}, idx=${idx}, fromPm=${fromPm}, toPm=${toPm}`);
+        }
+      }
+      return true;
+    });
+
+    if (fromPm < 0) {
+      dbg('applyReplaceTextWithTyping: text found in Y.XmlText but not in PM doc — unexpected');
+    }
+
+    // Step 1: Move cursor to start of target text
+    if (fromPm >= 0) {
+      this.setCursorAtPmPosition(fromPm, fromPm, mapping, type);
+      await CollabClient.sleep(75);
+
+      // Step 2: Extend selection to cover the full old text
+      this.setCursorAtPmPosition(fromPm, toPm, mapping, type);
+      dbg(`applyReplaceTextWithTyping: selection set from ${fromPm} to ${toPm}, sleeping 175ms`);
+      await CollabClient.sleep(175);
+    }
+
+    // Step 3: Delete old text in one transaction (collaborators see it disappear)
+    dbg(`applyReplaceTextWithTyping: deleting ${find.length} chars at charOffset=${charOffset}`);
+    this.ydoc.transact(() => {
+      ytext.delete(charOffset, find.length);
+    });
+    dbg(`applyReplaceTextWithTyping: after delete, ytext._length=${ytext._length}, plain="${ytext.toDelta().map((d: any) => d.insert).join('').slice(0, 60)}"`);
+    await CollabClient.sleep(40);
+
+    // Recompute mapping after deletion so cursor positions are accurate
+    const { mapping: postDeleteMapping } = initProseMirrorDoc(type, schema);
+    if (fromPm >= 0) {
+      this.setCursorAtPmPosition(fromPm, fromPm, postDeleteMapping, type);
+    }
+
+    // Step 4: Insert new text one character at a time (collaborators see it being typed).
+    // Sequential awaits are intentional — each delay lets the UI render the typed character.
+    /* eslint-disable no-await-in-loop */
+    dbg(`applyReplaceTextWithTyping: typing ${replace.length} chars...`);
+    for (let i = 0; i < replace.length; i += 1) {
+      this.ydoc.transact(() => {
+        ytext.insert(charOffset + i, replace[i]);
+      });
+      await CollabClient.sleep(20);
+    }
+    /* eslint-enable no-await-in-loop */
+
+    const newHtml = this.getContent() ?? currentHtml;
+    dbg(`applyReplaceTextWithTyping: done. getContent() snippet="${newHtml.slice(0, 200)}"`);
+    console.log(`[CollabClient] Typed "${replace.slice(0, 40)}" in place of "${find.slice(0, 40)}"`);
+    return {
+      success: true,
+      newHtml,
+      message: `Replaced "${find}" with "${replace}"`,
+    };
+  }
+
+  /**
+   * Apply a list of atomic document operations sequentially.
+   *
+   * replace_text operations use human-like typing simulation: cursor → selection → delete → type.
+   * All other operations apply DOM changes via aem2doc and move the cursor to the affected block.
+   * read_content is a no-op for document change — it returns the current HTML.
+   *
+   * Returns a promise that resolves to an array of per-operation results.
+   */
+  async applyOperations(operations: DocumentOperation[]): Promise<OperationResult[]> {
+    if (!this.ydoc) {
+      return operations.map((op) => ({
+        type: op.type,
+        success: false,
+        message: 'Not connected to collab session',
+      }));
+    }
+
+    dbg(`applyOperations: ${operations.length} operation(s): ${operations.map((o) => o.type).join(', ')}`);
+    dbg(`applyOperations: isConnected=${this.isConnected}, provider.awareness=${!!this.provider?.awareness}`);
+
+    const results: OperationResult[] = [];
+    let currentHtml = this.getContent() ?? '<body><main><div></div></main></body>';
+    dbg(`applyOperations: initial getContent() snippet="${currentHtml.slice(0, 200)}"`);
+
+    for (const op of operations) {
+      dbg(`applyOperations: processing op.type="${op.type}"`);
+
+      if (op.type === 'read_content') {
+        results.push({
+          type: 'read_content',
+          success: true,
+          message: 'Content read successfully',
+          content: currentHtml,
+        });
+      } else if (op.type === 'replace_text') {
+        // eslint-disable-next-line no-await-in-loop
+        const result = await this.applyReplaceTextWithTyping(
+          currentHtml,
+          op.find,
+          op.replace,
+          op.nth ?? 1,
+        );
+        if (result.success) {
+          currentHtml = result.newHtml;
+        }
+        dbg(`applyOperations: replace_text result: success=${result.success}, message="${result.message}"`);
+        results.push({
+          type: op.type,
+          success: result.success,
+          message: result.message,
+        });
+      } else if (op.type === 'insert_element') {
+        // eslint-disable-next-line no-await-in-loop
+        const result = await this.applyInsertElementWithTyping(currentHtml, op);
+        if (result.success) {
+          currentHtml = result.newHtml;
+        }
+        dbg(`applyOperations: insert_element result: success=${result.success}, message="${result.message}"`);
+        results.push({
+          type: op.type,
+          success: result.success,
+          message: result.message,
+        });
+      } else {
+        // For operations with an anchor, move cursor to the target element before applying.
+        // This gives collaborators a visual cue of what is about to change.
+        if ('anchor' in op) {
+          const fragIdx = this.findFragmentChildIndex(
+            (op as any).anchor as string,
+            (op as any).anchorIndex ?? 1,
+          );
+          if (fragIdx >= 0) {
+            this.setCursorAtElement(fragIdx);
+            // eslint-disable-next-line no-await-in-loop
+            await CollabClient.sleep(75);
+          }
+        }
+        let result: ReturnType<typeof applyOperation>;
+        try {
+          result = applyOperation(currentHtml, op);
+        } catch (domErr) {
+          dbg(`applyOperations: ${op.type} applyOperation THREW: ${String(domErr)}`);
+          results.push({ type: op.type, success: false, message: String(domErr) });
+          continue; // eslint-disable-line no-continue
+        }
+        dbg(`applyOperations: ${op.type} result: success=${result.success}, message="${result.message}", blockIndex=${result.blockIndex}`);
+        if (result.success) {
+          currentHtml = result.newHtml;
+          this.ydoc.transact(() => {
+            const fragInner = this.ydoc!.getXmlFragment('prosemirror');
+            fragInner.delete(0, fragInner.length);
+            this.ydoc!.share.forEach((sharedType) => {
+              if (sharedType instanceof Y.Map) sharedType.clear();
+            });
+            aem2doc(result.newHtml, this.ydoc!);
+          });
+          // Cursor set AFTER transact: points to newly created Y.js items
+          if (result.blockIndex >= 0) {
+            this.setCursorAtElement(result.blockIndex);
+          }
+        }
+        results.push({
+          type: op.type,
+          success: result.success,
+          message: result.message,
+        });
+      }
+    }
+
+    dbg(`applyOperations: finished. results=${JSON.stringify(results)}`);
+    return results;
   }
 
   /**
