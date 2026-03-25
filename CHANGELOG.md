@@ -1,3 +1,12 @@
+## [1.2.2](https://github.com/adobe-rnd/da-agent/compare/v1.2.1...v1.2.2) (2026-03-25)
+
+
+### Bug Fixes
+
+* auth and unpublish ([b6ca41c](https://github.com/adobe-rnd/da-agent/commit/b6ca41c0ea96d76e1309922abb740db124619aad))
+* clean up ([daf4abd](https://github.com/adobe-rnd/da-agent/commit/daf4abd2db848b7657313c422656eec70de2b97f))
+* cleanup tool naming ([727869a](https://github.com/adobe-rnd/da-agent/commit/727869aa71a394395b974b9dd40248662e8d1cb2))
+
 ## [1.2.1](https://github.com/adobe-rnd/da-agent/compare/v1.2.0...v1.2.1) (2026-03-25)
 
 
