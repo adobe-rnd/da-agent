@@ -199,6 +199,45 @@ async function loadSkills(client: DAAdminClient, org: string, site: string): Pro
   }
 }
 
+/**
+ * Turn per-message selectionContext (page excerpts from quick-edit) into text the model can use.
+ * Strips selectionContext from the payload so streamText receives plain CoreMessages.
+ */
+function formatSelectionContextForModel(items: any[]): string {
+  const lines: string[] = [
+    'The user attached the following excerpt(s) from the page they are editing. Treat this as authoritative context for their message. Indices refer to positions in the collaborative editor document.',
+    '',
+  ];
+  items.forEach((item, i) => {
+    const idx = typeof item?.proseIndex === 'number' ? item.proseIndex : '?';
+    let label = 'Prose section';
+    if (typeof item?.blockName === 'string' && item.blockName.trim()) {
+      label = `Block "${item.blockName.trim()}"`;
+    }
+    const body = typeof item?.innerText === 'string' ? item.innerText.trim() : '';
+    lines.push(`${i + 1}. ${label} (editor index: ${idx})`);
+    if (body) lines.push(`   Content: ${body}`);
+    lines.push('');
+  });
+  return lines.join('\n').trimEnd();
+}
+
+function expandUserSelectionContextForModel(messages: any[]): any[] {
+  return messages.map((msg) => {
+    if (msg.role !== 'user') return msg;
+    const items = msg.selectionContext;
+    if (!Array.isArray(items) || items.length === 0) {
+      const rest = { ...msg };
+      delete rest.selectionContext;
+      return rest;
+    }
+    const userText = typeof msg.content === 'string' ? msg.content : String(msg.content ?? '');
+    const prefix = formatSelectionContextForModel(items);
+    const content = `${prefix}\n\n---\n\nUser message:\n${userText}`;
+    return { role: 'user', content };
+  });
+}
+
 async function handleChat(request: Request, env: Env): Promise<Response> {
   let body: unknown;
   try {
@@ -245,6 +284,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   // The AI SDK's needsApproval is designed for stateful sessions; since each request
   // creates a fresh streamText call, we resolve approvals here instead.
   const processedMessages = await resolveApprovals(messages, daTools);
+  const modelMessages = expandUserSelectionContextForModel(processedMessages);
 
   const result = streamText({
     // model: bedrock('anthropic.claude-3-5-sonnet-20241022-v2:0'),
@@ -257,7 +297,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       collab?.disconnect();
     },
     system: buildSystemPrompt(pageContext, skills),
-    messages: processedMessages as ModelMessage[],
+    messages: modelMessages as ModelMessage[],
     tools: daTools,
     stopWhen: stepCountIs(5),
   });
