@@ -150,7 +150,8 @@ async function resolveApprovals(
             let output: any;
             if (resp.approved && daTools[toolName]?.execute) {
               try {
-                output = await daTools[toolName].execute(args, { toolCallId, messages: [] });
+                const cleanArgs = stripClientOnlyFromArgs(args);
+                output = await daTools[toolName].execute(cleanArgs, { toolCallId, messages: [] });
               } catch (e) {
                 output = { error: String(e) };
               }
@@ -178,6 +179,43 @@ async function resolveApprovals(
   return result;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any, no-await-in-loop */
+
+/**
+ * Remove client-only keys (e.g. revert snapshot) from tool-call inputs
+ * before the model or tool execute sees them.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function stripClientOnlyToolInputs(messages: any[]): any[] {
+  return messages.map((m) => {
+    if (m.role !== 'assistant' || !Array.isArray(m.content)) return m;
+    let changed = false;
+    const content = m.content.map((part: any) => {
+      if (part.type !== 'tool-call' || !part.input || typeof part.input !== 'object') return part;
+      const input = { ...part.input };
+      let stripped = false;
+      Object.keys(input).forEach((k) => {
+        if (k.startsWith('_da')) {
+          delete input[k];
+          stripped = true;
+        }
+      });
+      if (!stripped) return part;
+      changed = true;
+      return { ...part, input };
+    });
+    return changed ? { ...m, content } : m;
+  });
+}
+
+function stripClientOnlyFromArgs(args: any): any {
+  if (!args || typeof args !== 'object') return args;
+  const out = { ...args };
+  Object.keys(out).forEach((k) => {
+    if (k.startsWith('_da')) delete out[k];
+  });
+  return out;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 const SKILLS_PATH = '.da/skills';
 
@@ -302,7 +340,9 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   // The AI SDK's needsApproval is designed for stateful sessions; since each request
   // creates a fresh streamText call, we resolve approvals here instead.
   const processedMessages = await resolveApprovals(messages, tools);
-  const modelMessages = expandUserSelectionContextForModel(processedMessages);
+  const modelMessages = expandUserSelectionContextForModel(
+    stripClientOnlyToolInputs(processedMessages),
+  );
 
   const result = streamText({
     model: bedrock('global.anthropic.claude-sonnet-4-6'),
