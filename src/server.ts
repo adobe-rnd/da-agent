@@ -314,6 +314,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       metadata: {
         org: pageContext?.org ?? 'unknown',
         site: pageContext?.site ?? 'unknown',
+        path: pageContext?.path ?? 'unknown',
       },
     },
   });
