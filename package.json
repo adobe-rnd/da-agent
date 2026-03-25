@@ -25,7 +25,10 @@
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^4.0.0",
     "@da-tools/da-parser": "^1.1.2",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.6.0",
     "ai": "^6.0.101",
+    "langfuse-vercel": "^3.38.6",
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.29",
     "zod": "^4.3.6"
