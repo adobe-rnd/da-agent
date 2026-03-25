@@ -13,8 +13,8 @@ function makeOkResponse(body: object) {
   });
 }
 
-function makeErrorResponse(status: number, statusText: string) {
-  return new Response(JSON.stringify({ message: statusText }), {
+function makeErrorResponse(status: number, message: string) {
+  return new Response(JSON.stringify({ message }), {
     status,
     headers: { 'content-type': 'application/json' },
   });
@@ -80,6 +80,19 @@ describe('EDSAdminClient', () => {
       await expect(client.preview('org', 'repo', '/missing')).rejects.toMatchObject({
         status: 404,
         message: 'Not Found',
+      });
+    });
+
+    it('throws with statusText when error response body is not JSON', async () => {
+      mockFetch.mockResolvedValueOnce(new Response('Internal Server Error', {
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: { 'content-type': 'text/plain' },
+      }));
+
+      await expect(client.preview('org', 'repo', '/p')).rejects.toMatchObject({
+        status: 500,
+        message: 'Internal Server Error',
       });
     });
 

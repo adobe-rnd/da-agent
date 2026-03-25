@@ -23,7 +23,7 @@ export class EDSAdminClient {
   private normalisePath(path: string): string {
     // EDS Admin API does not use .html extensions
     const stripped = path.endsWith('.html') ? path.slice(0, -5) : path;
-    // Ensure leading slash is preserved; remove it from URL concatenation below
+    // Strip leading slash to avoid double-slash in URL concatenation
     return stripped.startsWith('/') ? stripped.slice(1) : stripped;
   }
 
@@ -77,7 +77,7 @@ export class EDSAdminClient {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body: any = await response.json();
     return {
-      status: response.status,
+      status: body[urlKey]?.status ?? response.status,
       path: body.webPath,
       url: body[urlKey]?.url,
     };
