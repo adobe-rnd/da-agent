@@ -30,6 +30,11 @@ export type PageContext = {
 export type DAToolsOptions = {
   pageContext?: PageContext;
   collab?: CollabClient | null;
+  resolveAttachmentByRef?: (attachmentRef: string) => {
+    base64Data: string;
+    mimeType: string;
+    fileName: string;
+  } | null;
 };
 
 function useCollabForDoc(
@@ -152,12 +157,20 @@ export function createDATools(
         'with all page content wrapped in <main> inside <body>. ' +
         'Separate sections with <hr>, represent EDS blocks as <div class="block-name"> elements where each ' +
         'content row is a child <div> and each column a nested <div>, use proper semantic HTML elements ' +
-        '(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks.',
+        '(headings, p, ul/ol/li, a, img with alt), and never use inline styles or <table> tags for blocks. ' +
+        'Always set humanReadableSummary to a short, clear explanation of what you changed (sections added/removed, ' +
+        'copy edits, block changes, etc.) so the user can approve without reading the full HTML.',
       inputSchema: z.object({
         org: z.string().describe('Organization name'),
         repo: z.string().describe('Repository name'),
         path: z.string().describe('Path to the file to update'),
         content: z.string().describe('New content for the file'),
+        humanReadableSummary: z
+          .string()
+          .describe(
+            'Brief plain-language summary of edits for the user (bullet-style or sentences). ' +
+              'No HTML; describe what changed, not the raw markup.',
+          ),
         contentType: z.string().optional().describe('Optional content type'),
       }),
       needsApproval: async () => true,
@@ -325,7 +338,9 @@ export function createDATools(
 
     tools.content_upload = tool({
       description:
-        'Upload an image or media file to a DA repository using base64-encoded data. ' +
+        'Upload an image or media file to a DA repository. ' +
+        'When the user attached files to their latest message, use attachmentRef from the provided list ' +
+        'instead of sending base64Data directly. ' +
         'When uploading images referenced in a page (e.g. during page creation or update), ' +
         'place the image in a child folder named after the page, sibling to the page file ' +
         '(e.g. page at "docs/my-page.html" → image at "docs/.my-page/image.png" with the folder name with a leading dot). ' +
@@ -341,13 +356,60 @@ export function createDATools(
               'For page-related images use a dot-prefixed folder named after the page: "docs/.my-page/image.png". ' +
               'For standalone uploads use the media folder: "media/image.png".',
           ),
-        base64Data: z.string().describe('Base64-encoded file content'),
-        mimeType: z.string().describe('MIME type of the file (e.g., "image/png", "image/jpeg")'),
-        fileName: z.string().describe('Original filename including extension (e.g., "photo.jpg")'),
+        attachmentRef: z
+          .string()
+          .optional()
+          .describe(
+            'Reference id of a file attached by the user in their latest message. ' +
+              'Prefer this over inline base64 when available.',
+          ),
+        base64Data: z
+          .string()
+          .optional()
+          .describe('Base64-encoded file content. Only use when no attachmentRef is available.'),
+        mimeType: z
+          .string()
+          .optional()
+          .describe(
+            'MIME type of the file (e.g., "image/png", "image/jpeg"). Required when using base64Data.',
+          ),
+        fileName: z
+          .string()
+          .optional()
+          .describe(
+            'Original filename including extension (e.g., "photo.jpg"). Required when using base64Data.',
+          ),
       }),
-      execute: async ({ org, repo, path, base64Data, mimeType, fileName }) => {
+      execute: async ({ org, repo, path, attachmentRef, base64Data, mimeType, fileName }) => {
         try {
-          return await client.uploadMedia(org, repo, path, base64Data, mimeType, fileName);
+          let resolvedBase64 = base64Data;
+          let resolvedMime = mimeType;
+          let resolvedName = fileName;
+          if (attachmentRef) {
+            const resolved = opts?.resolveAttachmentByRef?.(attachmentRef);
+            if (!resolved) {
+              return {
+                error: `Attachment reference "${attachmentRef}" was not found. Ask the user to re-attach the file and try again.`,
+              };
+            }
+            resolvedBase64 = resolved.base64Data;
+            resolvedMime = resolved.mimeType;
+            resolvedName = resolved.fileName;
+          }
+          if (!resolvedBase64 || !resolvedMime || !resolvedName) {
+            return {
+              error:
+                'Missing upload payload. Provide attachmentRef or base64Data + mimeType + fileName.',
+            };
+          }
+          return await client.uploadMedia(
+            org,
+            repo,
+            path,
+            resolvedBase64,
+            resolvedMime,
+            resolvedName,
+          );
         } catch (e) {
           if (isAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };
@@ -505,28 +567,28 @@ export function createCanvasClientTools() {
   return {
     da_bulk_preview: tool({
       description:
-        'Open a bulk preview dialog in the user\'s browser for multiple DA pages at once. '
-        + 'Use when the user wants to preview several pages in the canvas workspace without opening each one manually. '
-        + 'Paths may be relative to the current org/repo (e.g. "folder/page.html") or full "org/repo/path/to/page.html". '
-        + 'The user confirms in the dialog; results are returned after they finish or cancel.',
+        "Open a bulk preview dialog in the user's browser for multiple DA pages at once. " +
+        'Use when the user wants to preview several pages in the canvas workspace without opening each one manually. ' +
+        'Paths may be relative to the current org/repo (e.g. "folder/page.html") or full "org/repo/path/to/page.html". ' +
+        'The user confirms in the dialog; results are returned after they finish or cancel.',
       inputSchema: bulkAemPagesInputSchema,
       outputSchema: bulkAemCanvasDialogOutputSchema,
     }),
     da_bulk_publish: tool({
       description:
-        'Open a bulk publish dialog in the user\'s browser to publish multiple DA pages to AEM live (preview then live). '
-        + 'Use when the user wants to publish several pages at once from the canvas workspace. '
-        + 'Paths may be relative to the current org/repo or full "org/repo/path/to/page.html". '
-        + 'The user runs the action in the dialog; results return after they finish or cancel.',
+        "Open a bulk publish dialog in the user's browser to publish multiple DA pages to AEM live (preview then live). " +
+        'Use when the user wants to publish several pages at once from the canvas workspace. ' +
+        'Paths may be relative to the current org/repo or full "org/repo/path/to/page.html". ' +
+        'The user runs the action in the dialog; results return after they finish or cancel.',
       inputSchema: bulkAemPagesInputSchema,
       outputSchema: bulkAemCanvasDialogOutputSchema,
     }),
     da_bulk_delete: tool({
       description:
-        'Open a bulk delete dialog in the user\'s browser to unpublish multiple pages from AEM live (DELETE on live). '
-        + 'Use only when the user explicitly wants to remove published pages. '
-        + 'Paths may be relative to the current org/repo or full "org/repo/path/to/page.html". '
-        + 'The user confirms in the dialog; results return after they finish or cancel.',
+        "Open a bulk delete dialog in the user's browser to unpublish multiple pages from AEM live (DELETE on live). " +
+        'Use only when the user explicitly wants to remove published pages. ' +
+        'Paths may be relative to the current org/repo or full "org/repo/path/to/page.html". ' +
+        'The user confirms in the dialog; results return after they finish or cancel.',
       inputSchema: bulkAemPagesInputSchema,
       outputSchema: bulkAemCanvasDialogOutputSchema,
     }),

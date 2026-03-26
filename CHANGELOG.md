@@ -1,3 +1,50 @@
+## [1.8.1](https://github.com/adobe-rnd/da-agent/compare/v1.8.0...v1.8.1) (2026-03-26)
+
+
+### Bug Fixes
+
+* instruct system prompt to use correct image urls ([25057f7](https://github.com/adobe-rnd/da-agent/commit/25057f75fdd375d5ac6c6e1bdcd40f36fe768928))
+
+# [1.8.0](https://github.com/adobe-rnd/da-agent/compare/v1.7.0...v1.8.0) (2026-03-26)
+
+
+### Features
+
+* track IMS user ID in Langfuse telemetry ([27e84fa](https://github.com/adobe-rnd/da-agent/commit/27e84fa7283604eddb0f0c7ec8e05d7e96e8aefa))
+
+# [1.7.0](https://github.com/adobe-rnd/da-agent/compare/v1.6.0...v1.7.0) (2026-03-26)
+
+
+### Bug Fixes
+
+* vibe workflow ([8badacc](https://github.com/adobe-rnd/da-agent/commit/8badaccd1a35f970356561946af9caa13a120348))
+
+
+### Features
+
+* image upload ([ee3b1bd](https://github.com/adobe-rnd/da-agent/commit/ee3b1bd4383bee549cc85ae5bc182873ac76c689))
+
+# [1.6.0](https://github.com/adobe-rnd/da-agent/compare/v1.5.0...v1.6.0) (2026-03-25)
+
+
+### Features
+
+* support revert ([edf5b95](https://github.com/adobe-rnd/da-agent/commit/edf5b95e24aa51ed189deae529ce89909eecd2db))
+
+# [1.5.0](https://github.com/adobe-rnd/da-agent/compare/v1.4.2...v1.5.0) (2026-03-25)
+
+
+### Features
+
+* add human message to edit tool ([cac7abb](https://github.com/adobe-rnd/da-agent/commit/cac7abb864f0cd9d72a29f128332bf267e280839))
+
+## [1.4.2](https://github.com/adobe-rnd/da-agent/compare/v1.4.1...v1.4.2) (2026-03-25)
+
+
+### Bug Fixes
+
+* use correct external URLs ([52aa81c](https://github.com/adobe-rnd/da-agent/commit/52aa81cd4746e6d3442cffab3c0741710526b164))
+
 ## [1.4.1](https://github.com/adobe-rnd/da-agent/compare/v1.4.0...v1.4.1) (2026-03-25)
 
 

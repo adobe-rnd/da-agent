@@ -35,6 +35,17 @@ const ChatRequestSchema = z.object({
   agentId: z.string().optional(),
   requestedSkills: z.array(z.string()).optional(),
   mcpServers: z.record(z.string(), z.string()).optional(),
+  attachments: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        fileName: z.string().min(1),
+        mediaType: z.string().min(1),
+        dataBase64: z.string().min(1),
+        sizeBytes: z.number().int().nonnegative().optional(),
+      }),
+    )
+    .optional(),
 });
 
 type PageContext = z.infer<typeof PageContextSchema>;
@@ -76,19 +87,22 @@ export default {
  * 4. Strips tool-approval-request parts from assistant messages.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any, no-await-in-loop */
-async function resolveApprovals(
-  messages: any[],
-  daTools: Record<string, any>,
-): Promise<any[]> {
+async function resolveApprovals(messages: any[], daTools: Record<string, any>): Promise<any[]> {
   const result: any[] = messages.map((m) => ({
     ...m,
     content: Array.isArray(m.content) ? [...m.content] : m.content,
   }));
 
   // 1. Build lookup: approvalId → { toolCallId, toolName, args, msgIdx }
-  const approvalMeta = new Map<string, {
-    toolCallId: string; toolName: string; args: any; msgIdx: number;
-  }>();
+  const approvalMeta = new Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      args: any;
+      msgIdx: number;
+    }
+  >();
   for (let i = 0; i < result.length; i += 1) {
     const msg = result[i];
     if (msg.role === 'assistant' && Array.isArray(msg.content)) {
@@ -133,9 +147,7 @@ async function resolveApprovals(
       if (resp) {
         const meta = approvalMeta.get(resp.approvalId);
         if (meta) {
-          const {
-            toolCallId, toolName, args, msgIdx,
-          } = meta;
+          const { toolCallId, toolName, args, msgIdx } = meta;
 
           // Strip the approval-request from the assistant message
           result[msgIdx].content = result[msgIdx].content.filter(
@@ -146,21 +158,24 @@ async function resolveApprovals(
           if (i < lastConversationIdx) {
             result[i] = {
               role: 'tool',
-              content: [{
-                type: 'tool-result',
-                toolCallId,
-                toolName,
-                output: resp.approved
-                  ? { type: 'text' as const, value: '(previously executed)' }
-                  : { type: 'json' as const, value: { message: 'Action rejected by user.' } },
-              }],
+              content: [
+                {
+                  type: 'tool-result',
+                  toolCallId,
+                  toolName,
+                  output: resp.approved
+                    ? { type: 'text' as const, value: '(previously executed)' }
+                    : { type: 'json' as const, value: { message: 'Action rejected by user.' } },
+                },
+              ],
             };
           } else {
             // Fresh: execute the tool or create rejection result
             let output: any;
             if (resp.approved && daTools[toolName]?.execute) {
               try {
-                output = await daTools[toolName].execute(args, { toolCallId, messages: [] });
+                const cleanArgs = stripClientOnlyFromArgs(args);
+                output = await daTools[toolName].execute(cleanArgs, { toolCallId, messages: [] });
               } catch (e) {
                 output = { error: String(e) };
               }
@@ -170,14 +185,17 @@ async function resolveApprovals(
 
             result[i] = {
               role: 'tool',
-              content: [{
-                type: 'tool-result',
-                toolCallId,
-                toolName,
-                output: typeof output === 'string'
-                  ? { type: 'text', value: output }
-                  : { type: 'json', value: output },
-              }],
+              content: [
+                {
+                  type: 'tool-result',
+                  toolCallId,
+                  toolName,
+                  output:
+                    typeof output === 'string'
+                      ? { type: 'text', value: output }
+                      : { type: 'json', value: output },
+                },
+              ],
             };
           }
         }
@@ -188,6 +206,43 @@ async function resolveApprovals(
   return result;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any, no-await-in-loop */
+
+/**
+ * Remove client-only keys (e.g. revert snapshot) from tool-call inputs
+ * before the model or tool execute sees them.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function stripClientOnlyToolInputs(messages: any[]): any[] {
+  return messages.map((m) => {
+    if (m.role !== 'assistant' || !Array.isArray(m.content)) return m;
+    let changed = false;
+    const content = m.content.map((part: any) => {
+      if (part.type !== 'tool-call' || !part.input || typeof part.input !== 'object') return part;
+      const input = { ...part.input };
+      let stripped = false;
+      Object.keys(input).forEach((k) => {
+        if (k.startsWith('_da')) {
+          delete input[k];
+          stripped = true;
+        }
+      });
+      if (!stripped) return part;
+      changed = true;
+      return { ...part, input };
+    });
+    return changed ? { ...m, content } : m;
+  });
+}
+
+function stripClientOnlyFromArgs(args: any): any {
+  if (!args || typeof args !== 'object') return args;
+  const out = { ...args };
+  Object.keys(out).forEach((k) => {
+    if (k.startsWith('_da')) delete out[k];
+  });
+  return out;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * Turn per-message selectionContext (page excerpts from quick-edit) into text the model can use.
@@ -294,6 +349,74 @@ async function handleMcpToolsList(request: Request): Promise<Response> {
   });
 }
 
+function formatAttachmentsForModel(
+  items: Array<{
+    id: string;
+    fileName: string;
+    mediaType: string;
+    sizeBytes?: number;
+  }>,
+): string {
+  const lines: string[] = [
+    'The user attached file(s). Binary contents are not available in chat context.',
+    'If you need one for upload, call content_upload using attachmentRef from this list.',
+    '',
+    'Attached files:',
+  ];
+  items.forEach((item) => {
+    const size = typeof item.sizeBytes === 'number' ? `, ${item.sizeBytes} bytes` : '';
+    lines.push(`- [${item.id}] ${item.fileName} (${item.mediaType}${size})`);
+  });
+  return lines.join('\n');
+}
+
+function expandLatestUserAttachmentsForModel(
+  messages: any[],
+  attachmentMeta: Array<{
+    id: string;
+    fileName: string;
+    mediaType: string;
+    sizeBytes?: number;
+  }>,
+): any[] {
+  if (!Array.isArray(attachmentMeta) || attachmentMeta.length === 0) {
+    return messages.map((msg) => {
+      if (msg.role !== 'user' || !msg || typeof msg !== 'object') return msg;
+      const next = { ...msg };
+      delete next.attachmentsMeta;
+      return next;
+    });
+  }
+  let lastUserIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === 'user') {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  return messages.map((msg, idx) => {
+    if (msg.role !== 'user' || !msg || typeof msg !== 'object') return msg;
+    const next = { ...msg };
+    delete next.attachmentsMeta;
+    if (idx !== lastUserIndex) return next;
+    const userText = typeof next.content === 'string' ? next.content : String(next.content ?? '');
+    const prefix = formatAttachmentsForModel(attachmentMeta);
+    next.content = `${prefix}\n\n---\n\nUser message:\n${userText}`;
+    return next;
+  });
+}
+
+function extractImsUserId(token: string | undefined): string | undefined {
+  if (!token) return undefined;
+  try {
+    const payload = token.split('.')[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded.user_id ?? decoded.sub ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function handleChat(request: Request, env: Env): Promise<Response> {
   initTelemetry(env);
 
@@ -309,7 +432,17 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response('Invalid request body', { status: 400 });
   }
 
-  const { messages, pageContext, imsToken, agentId, requestedSkills, mcpServers } = parsed.data;
+  const {
+    messages,
+    pageContext,
+    imsToken,
+    agentId,
+    requestedSkills,
+    mcpServers,
+    attachments = [],
+  } = parsed.data;
+
+  const attachmentMap = new Map(attachments.map((a) => [a.id, a]));
 
   const bedrock = createAmazonBedrock({
     region: env.AWS_REGION,
@@ -336,6 +469,15 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     collab: collab ?? undefined,
     org: pageContext?.org,
     repo: pageContext?.site,
+    resolveAttachmentByRef: (attachmentRef: string) => {
+      const hit = attachmentMap.get(attachmentRef);
+      if (!hit) return null;
+      return {
+        base64Data: hit.dataBase64,
+        mimeType: hit.mediaType,
+        fileName: hit.fileName,
+      };
+    },
   });
   const edsTools = edsClient ? createEDSTools(edsClient) : {};
   const canvasClientTools = createCanvasClientTools();
@@ -453,7 +595,16 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const allTools = { ...canvasClientTools, ...daTools, ...edsTools, ...mcpTools };
 
   const processedMessages = await resolveApprovals(messages, allTools);
-  const modelMessages = expandUserSelectionContextForModel(processedMessages);
+  const withSelectionContext = expandUserSelectionContextForModel(
+    stripClientOnlyToolInputs(processedMessages),
+  );
+  const attachmentMeta = attachments.map((a) => ({
+    id: a.id,
+    fileName: a.fileName,
+    mediaType: a.mediaType,
+    ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
+  }));
+  const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
 
   const cleanupMCP = () => {
     mcpClients.forEach((c) => {
@@ -485,6 +636,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       isEnabled: true,
       functionId: 'da-agent-chat',
       metadata: {
+        userId: extractImsUserId(imsToken) ?? 'unknown',
         org: pageContext?.org ?? 'unknown',
         site: pageContext?.site ?? 'unknown',
         path: pageContext?.path ?? 'unknown',
@@ -662,6 +814,10 @@ ALL content you create or update via tools MUST be valid Edge Delivery Services 
     </main>
   </body>
   \`\`\`
+
+**Images**
+- To add an image to the page, use the content_upload tool to upload the image. After this point, only the contentUrl is available, not the other image urls.
+- If you are asked to add an image to the page that you uploaded with the content_upload tool, ALWAYS use the contentUrl returned by the tool call as the src attribute.
 
 **Semantic HTML**
 - Use proper heading hierarchy: \`<h1>\` for page title, \`<h2>\`–\`<h6>\` for sections
