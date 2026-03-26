@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/adobe-rnd/da-agent/compare/v1.7.0...v1.8.0) (2026-03-26)
+
+
+### Features
+
+* track IMS user ID in Langfuse telemetry ([27e84fa](https://github.com/adobe-rnd/da-agent/commit/27e84fa7283604eddb0f0c7ec8e05d7e96e8aefa))
+
 # [1.7.0](https://github.com/adobe-rnd/da-agent/compare/v1.6.0...v1.7.0) (2026-03-26)
 
 
