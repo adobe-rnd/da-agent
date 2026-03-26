@@ -537,6 +537,10 @@ ALL content you create or update via tools MUST be valid Edge Delivery Services 
   </body>
   \`\`\`
 
+**Images**
+- To add an image to the page, use the content_upload tool to upload the image. After this point, only the contentUrl is available, not the other image urls.
+- If you are asked to add an image to the page that you uploaded with the content_upload tool, ALWAYS use the contentUrl returned by the tool call as the src attribute.
+
 **Semantic HTML**
 - Use proper heading hierarchy: \`<h1>\` for page title, \`<h2>\`–\`<h6>\` for sections
 - Use \`<p>\`, \`<ul>\`, \`<ol>\`, \`<li>\`, \`<a>\`, \`<strong>\`, \`<em>\` as appropriate
