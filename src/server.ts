@@ -407,6 +407,7 @@ The user is in the document editor. Apply these rules for EVERY message in this 
 **Reading before writing**
 - ALWAYS call \`da_read_content\` first, before any changes
 - Never assume or invent the current content
+- The result includes \`cursorAnchor\`: a text excerpt from the block where the user's cursor is. When the user says "here", "at this position", "at the cursor", or doesn't specify a location, use \`cursorAnchor\` as the \`anchor\` in write tools. If \`cursorAnchor\` is null, ask the user to place their cursor.
 
 **Choosing the right tool — follow this strictly:**
 

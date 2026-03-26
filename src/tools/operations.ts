@@ -158,4 +158,10 @@ export type OperationResult = {
   message: string;
   /** Present for read_content operations — the current EDS HTML of the document. */
   content?: string;
+  /**
+   * Present for read_content operations — a text excerpt from the block element
+   * where the human user's cursor is currently positioned, or null if unavailable.
+   * Use this as the anchor when the user says "here" or doesn't specify a location.
+   */
+  cursorAnchor?: string | null;
 };

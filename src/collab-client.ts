@@ -492,6 +492,58 @@ export class CollabClient {
   }
 
   /**
+   * Return a text excerpt from the block element where the human user's cursor is positioned.
+   * Reads the other (non-AI) user's awareness cursor, resolves the relative position to a
+   * top-level Y.XmlFragment child, and returns the first 100 chars of its plain text.
+   * Returns null if the cursor cannot be determined (e.g. no other user connected yet).
+   */
+  private getUserCursorAnchor(): string | null {
+    if (!this.ydoc || !this.provider?.awareness) return null;
+    const { awareness } = this.provider;
+    const myId = awareness.clientID;
+    const frag = this.ydoc.getXmlFragment('prosemirror');
+    const fragChildren = (frag as any).toArray() as any[];
+
+    const getNodeText = (node: any): string => {
+      if (node instanceof Y.XmlText) return node.toDelta().map((d: any) => d.insert as string).join('');
+      if (node instanceof Y.XmlElement) return (node as any).toArray().map(getNodeText).join('');
+      return '';
+    };
+
+    for (const [clientId, state] of awareness.getStates()) {
+      if (clientId !== myId) { // skip the AI's own cursor
+        const cursorAnchor = state?.cursor?.anchor;
+        if (cursorAnchor) {
+          try {
+            const relPos = Y.createRelativePositionFromJSON(cursorAnchor);
+            const absPos = Y.createAbsolutePositionFromRelativePosition(relPos, this.ydoc);
+            if (absPos?.type) {
+              // Walk up through parent references until we find a direct child of frag
+              let node: any = absPos.type;
+              while (node && (node as any).parent !== frag) {
+                node = (node as any).parent;
+              }
+              if (node) {
+                const idx = fragChildren.indexOf(node);
+                if (idx >= 0) {
+                  const text = getNodeText(node).trim();
+                  if (text) {
+                    dbg(`getUserCursorAnchor: user cursor at frag[${idx}] = "${text.slice(0, 60)}"`);
+                    return text.slice(0, 100);
+                  }
+                }
+              }
+            }
+          } catch {
+            // ignore — position may be stale or unresolvable
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
    * Extract plain text content from an HTML fragment string using DOMParser.
    */
   private static extractTextFromHtml(html: string): string {
@@ -529,7 +581,7 @@ export class CollabClient {
     const anchorFragIdx = this.findFragmentChildIndex(op.anchor, op.anchorIndex ?? 1);
     if (anchorFragIdx >= 0) {
       this.setCursorAtElement(anchorFragIdx);
-      await CollabClient.sleep(75);
+      await CollabClient.sleep(38);
     }
 
     // Step 2: Apply DOM operation to get updated HTML
@@ -545,12 +597,8 @@ export class CollabClient {
       return { success: false, newHtml: currentHtml, message: domResult.message };
     }
 
-    // New element lands at blockIndex (before) or blockIndex+1 (after) in the block list
-    const newElementIndex = op.insertPosition === 'after'
-      ? domResult.blockIndex + 1
-      : domResult.blockIndex;
     const insertText = CollabClient.extractTextFromHtml(op.html);
-    dbg(`applyInsertElementWithTyping: newElementIndex=${newElementIndex}, insertText="${insertText.slice(0, 60)}"`);
+    dbg(`applyInsertElementWithTyping: insertText="${insertText.slice(0, 60)}"`);
 
     // Step 3: Apply aem2doc — new element appears in editor
     this.ydoc.transact(() => {
@@ -562,7 +610,15 @@ export class CollabClient {
       aem2doc(domResult.newHtml, this.ydoc!);
     });
 
-    // Step 4: If there's a direct Y.XmlText child in the new element, delete its text and retype
+    // Step 4: Find the new element by locating the anchor in the fragment (post-aem2doc)
+    // and offsetting by insertPosition. This avoids the DOM blockIndex vs fragment index mismatch.
+    const postAnchorFragIdx = this.findFragmentChildIndex(op.anchor, op.anchorIndex ?? 1);
+    const newElementIndex = postAnchorFragIdx >= 0
+      ? postAnchorFragIdx + (op.insertPosition === 'after' ? 1 : 0)
+      : -1;
+    dbg(`applyInsertElementWithTyping: postAnchorFragIdx=${postAnchorFragIdx}, newElementIndex=${newElementIndex}`);
+
+    // Step 5: If there's a direct Y.XmlText child in the new element, delete its text and retype
     if (insertText && newElementIndex >= 0) {
       const frag = this.ydoc.getXmlFragment('prosemirror');
       const newEl = (frag as any).toArray()[newElementIndex];
@@ -578,7 +634,7 @@ export class CollabClient {
             ytext.delete(0, currentPlain.length);
           });
           this.setCursorAtElement(newElementIndex);
-          await CollabClient.sleep(75);
+          await CollabClient.sleep(38);
 
           // Type each character one at a time — sequential awaits are intentional
           /* eslint-disable no-await-in-loop */
@@ -586,7 +642,7 @@ export class CollabClient {
             this.ydoc.transact(() => {
               ytext.insert(i, insertText[i]);
             });
-            await CollabClient.sleep(20);
+            await CollabClient.sleep(10);
           }
           /* eslint-enable no-await-in-loop */
 
@@ -697,12 +753,12 @@ export class CollabClient {
     // Step 1: Move cursor to start of target text
     if (fromPm >= 0) {
       this.setCursorAtPmPosition(fromPm, fromPm, mapping, type);
-      await CollabClient.sleep(75);
+      await CollabClient.sleep(38);
 
       // Step 2: Extend selection to cover the full old text
       this.setCursorAtPmPosition(fromPm, toPm, mapping, type);
       dbg(`applyReplaceTextWithTyping: selection set from ${fromPm} to ${toPm}, sleeping 175ms`);
-      await CollabClient.sleep(175);
+      await CollabClient.sleep(88);
     }
 
     // Step 3: Delete old text in one transaction (collaborators see it disappear)
@@ -711,7 +767,7 @@ export class CollabClient {
       ytext.delete(charOffset, find.length);
     });
     dbg(`applyReplaceTextWithTyping: after delete, ytext._length=${ytext._length}, plain="${ytext.toDelta().map((d: any) => d.insert).join('').slice(0, 60)}"`);
-    await CollabClient.sleep(40);
+    await CollabClient.sleep(20);
 
     // Recompute mapping after deletion so cursor positions are accurate
     const { mapping: postDeleteMapping } = initProseMirrorDoc(type, schema);
@@ -727,7 +783,7 @@ export class CollabClient {
       this.ydoc.transact(() => {
         ytext.insert(charOffset + i, replace[i]);
       });
-      await CollabClient.sleep(20);
+      await CollabClient.sleep(10);
     }
     /* eslint-enable no-await-in-loop */
 
@@ -775,6 +831,7 @@ export class CollabClient {
           success: true,
           message: 'Content read successfully',
           content: currentHtml,
+          cursorAnchor: this.getUserCursorAnchor(),
         });
       } else if (op.type === 'replace_text') {
         // eslint-disable-next-line no-await-in-loop
@@ -816,7 +873,7 @@ export class CollabClient {
           if (fragIdx >= 0) {
             this.setCursorAtElement(fragIdx);
             // eslint-disable-next-line no-await-in-loop
-            await CollabClient.sleep(75);
+            await CollabClient.sleep(38);
           }
         }
         let result: ReturnType<typeof applyOperation>;
