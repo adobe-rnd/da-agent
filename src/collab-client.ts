@@ -636,17 +636,23 @@ export class CollabClient {
           this.setCursorAtElement(newElementIndex);
           await CollabClient.sleep(38);
 
-          // Type each character one at a time — sequential awaits are intentional
+          // Type word by word — sequential awaits are intentional
           /* eslint-disable no-await-in-loop */
-          for (let i = 0; i < insertText.length; i += 1) {
+          const words = insertText.split(' ');
+          let offset = 0;
+          for (let i = 0; i < words.length; i += 1) {
+            const chunk = i < words.length - 1 ? `${words[i]} ` : words[i];
+            const chunkCopy = chunk;
+            const offsetCopy = offset;
             this.ydoc.transact(() => {
-              ytext.insert(i, insertText[i]);
+              ytext.insert(offsetCopy, chunkCopy);
             });
+            offset += chunk.length;
             await CollabClient.sleep(10);
           }
           /* eslint-enable no-await-in-loop */
 
-          dbg(`applyInsertElementWithTyping: typed ${insertText.length} chars`);
+          dbg(`applyInsertElementWithTyping: typed ${words.length} words`);
         } else {
           // Complex block — cursor set only, no typing animation
           this.setCursorAtElement(newElementIndex);
@@ -775,14 +781,20 @@ export class CollabClient {
       this.setCursorAtPmPosition(fromPm, fromPm, postDeleteMapping, type);
     }
 
-    // Step 4: Insert new text one character at a time (collaborators see it being typed).
-    // Sequential awaits are intentional — each delay lets the UI render the typed character.
+    // Step 4: Insert new text word by word (collaborators see it being typed).
+    // Sequential awaits are intentional — each delay lets the UI render the typed word.
     /* eslint-disable no-await-in-loop */
-    dbg(`applyReplaceTextWithTyping: typing ${replace.length} chars...`);
-    for (let i = 0; i < replace.length; i += 1) {
+    dbg(`applyReplaceTextWithTyping: typing ${replace.split(' ').length} words...`);
+    const replaceWords = replace.split(' ');
+    let replaceOffset = charOffset;
+    for (let i = 0; i < replaceWords.length; i += 1) {
+      const chunk = i < replaceWords.length - 1 ? `${replaceWords[i]} ` : replaceWords[i];
+      const chunkCopy = chunk;
+      const offsetCopy = replaceOffset;
       this.ydoc.transact(() => {
-        ytext.insert(charOffset + i, replace[i]);
+        ytext.insert(offsetCopy, chunkCopy);
       });
+      replaceOffset += chunk.length;
       await CollabClient.sleep(10);
     }
     /* eslint-enable no-await-in-loop */
