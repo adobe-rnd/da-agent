@@ -18,14 +18,14 @@ function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient
   const toolName = `mcp__${serverId}__${mcpTool.name}`;
   const description = mcpTool.description ?? `MCP tool ${mcpTool.name} from server ${serverId}`;
 
-  const inputSchema = mcpTool.inputSchema as Record<string, unknown> | undefined;
-  // Bedrock requires type:"object" at the root of every tool input schema.
-  // Always force it — the MCP SDK sometimes omits it or sets it incorrectly.
-  let schemaObj: Record<string, unknown>;
-  if (inputSchema && Object.keys(inputSchema).length > 0) {
-    schemaObj = { ...inputSchema, type: 'object' };
-  } else {
-    schemaObj = { type: 'object', properties: {} };
+  const rawInput = mcpTool.inputSchema as Record<string, unknown> | undefined;
+  // Bedrock requires type:"object" at the root and does not accept additionalProperties.
+  // Rebuild a clean minimal schema from only the fields Bedrock supports.
+  const properties = (rawInput?.properties as Record<string, unknown>) ?? {};
+  const rawRequired = rawInput?.required;
+  const schemaObj: Record<string, unknown> = { type: 'object', properties };
+  if (Array.isArray(rawRequired) && rawRequired.length > 0) {
+    schemaObj.required = rawRequired;
   }
   const schema = jsonSchema(schemaObj);
 
