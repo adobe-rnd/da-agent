@@ -19,10 +19,15 @@ function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient
   const description = mcpTool.description ?? `MCP tool ${mcpTool.name} from server ${serverId}`;
 
   const inputSchema = mcpTool.inputSchema as Record<string, unknown> | undefined;
-  const schema =
-    inputSchema && Object.keys(inputSchema).length > 0
-      ? jsonSchema(inputSchema)
-      : jsonSchema({ type: 'object', properties: {} });
+  // Bedrock requires type:"object" at the root of every tool input schema.
+  // The MCP SDK sometimes omits it, so we always ensure it is set.
+  let schemaObj: Record<string, unknown>;
+  if (inputSchema && Object.keys(inputSchema).length > 0) {
+    schemaObj = inputSchema.type ? inputSchema : { type: 'object', ...inputSchema };
+  } else {
+    schemaObj = { type: 'object', properties: {} };
+  }
+  const schema = jsonSchema(schemaObj);
 
   return {
     name: toolName,
@@ -74,7 +79,7 @@ export async function connectAndRegisterMCPTools(
       }
 
       const remoteHeaders = isRemoteConfig(config)
-        ? (config as RemoteMCPServerConfig).headers ?? {}
+        ? ((config as RemoteMCPServerConfig).headers ?? {})
         : {};
       const serverHeaders = {
         ...(options?.headers ?? {}),
