@@ -1,3 +1,15 @@
+# [1.7.0](https://github.com/adobe-rnd/da-agent/compare/v1.6.0...v1.7.0) (2026-03-26)
+
+
+### Bug Fixes
+
+* vibe workflow ([8badacc](https://github.com/adobe-rnd/da-agent/commit/8badaccd1a35f970356561946af9caa13a120348))
+
+
+### Features
+
+* image upload ([ee3b1bd](https://github.com/adobe-rnd/da-agent/commit/ee3b1bd4383bee549cc85ae5bc182873ac76c689))
+
 # [1.6.0](https://github.com/adobe-rnd/da-agent/compare/v1.5.0...v1.6.0) (2026-03-25)
 
 
