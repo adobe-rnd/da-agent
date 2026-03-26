@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/adobe-rnd/da-agent/compare/v1.9.0...v1.10.0) (2026-03-26)
+
+
+### Features
+
+* make publish workflow return full url ([d6f3ca7](https://github.com/adobe-rnd/da-agent/commit/d6f3ca742602662b3893405d3782c40d93e63c06))
+
 # [1.9.0](https://github.com/adobe-rnd/da-agent/compare/v1.8.1...v1.9.0) (2026-03-26)
 
 
