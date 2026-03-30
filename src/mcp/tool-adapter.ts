@@ -75,6 +75,7 @@ function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient
       description,
       inputSchema,
       execute: async (args: Record<string, unknown>) => {
+        console.log(`[mcp] ${toolName} args:`, JSON.stringify(args, null, 2));
         try {
           const result = await mcpClient.callTool(mcpTool.name, args);
           if (result.isError) {
