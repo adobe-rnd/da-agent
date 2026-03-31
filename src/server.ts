@@ -14,6 +14,7 @@ import { loadAgentPreset } from './agents/loader.js';
 import type { AgentPreset } from './agents/loader.js';
 import { connectAndRegisterMCPTools } from './mcp/tool-adapter.js';
 import { MCPClient } from './mcp/client.js';
+import { fetchProjectMemory } from './memory/loader.js';
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -464,6 +465,11 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   const edsClient = imsToken ? new EDSAdminClient({ apiToken: imsToken }) : null;
 
+  const projectMemory =
+    adminClient && pageContext
+      ? await fetchProjectMemory(adminClient, pageContext.org, pageContext.site)
+      : null;
+
   const daTools = createDATools(adminClient, {
     pageContext: pageContext ?? undefined,
     collab: collab ?? undefined,
@@ -628,7 +634,14 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       collab?.disconnect();
       cleanupMCP();
     },
-    system: buildSystemPrompt(pageContext, mcpConfig, skillsIndex, activeAgent, agentSkillContents),
+    system: buildSystemPrompt(
+      pageContext,
+      mcpConfig,
+      skillsIndex,
+      activeAgent,
+      agentSkillContents,
+      projectMemory,
+    ),
     messages: modelMessages as ModelMessage[],
     tools: allTools,
     stopWhen: stepCountIs(5),
@@ -701,6 +714,7 @@ function buildSystemPrompt(
   skillsIndex?: SkillsIndex | null,
   activeAgent?: AgentPreset | null,
   agentSkillContents?: Record<string, string>,
+  projectMemory?: string | null,
 ): string {
   const mcpSection = buildMCPPromptSection(mcpConfig);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
@@ -723,26 +737,6 @@ CRITICAL INSTRUCTION - TOOL USAGE:
 - Good: "Done! The page now contains..."
 - Bad: "Here is the updated HTML: \`\`\`html <body>...</body> \`\`\`"
 - Good: (call the update tool directly, then confirm in plain prose)
-
-## Session Memory Footer (required on every response)
-At the end of EVERY assistant response, append a machine-readable memory block with this exact format:
-<!--DA_MEMORY_START-->
-update memory:
-<memory summary text>
-<!--DA_MEMORY_END-->
-
-Rules for this memory summary:
-- Maximum 200 words total.
-- Describe recent modifications made to the site and its content, not personal user activity.
-- Write this as shared site memory that should remain useful for any user who opens this site later.
-- Keep recent site changes specific and concrete.
-- If the summary grows too long, compress older items first:
-  1) summarize older details more roughly,
-  2) keep only durable themes for oldest items,
-  3) eventually fade/drop oldest items entirely.
-- Do not include tool names, implementation internals, or user-identity details.
-- Keep this memory block in plain text only (no markdown code fences).
-- Always include exactly one memory block, and place it at the very end of your response.
 
 ## Rich Response Formatting
 When presenting structured information in your responses (NOT in HTML content for tools), use these block syntaxes for richer display. Wrap content in triple-colon fences:
@@ -882,7 +876,31 @@ The user is in the document editor. Apply these rules for EVERY message in this 
     : ''
 }`
     : ''
-}${mcpSection}${skillsSection}${agentSection}
+}${
+    projectMemory
+      ? `
+## Project Memory
+The following is long-lived memory about this site, accumulated from previous sessions:
+
+${projectMemory}
+
+Use this context to better understand the site before taking any actions.
+`
+      : ''
+  }${
+    pageContext
+      ? `
+## Project Memory
+When you discover significant information about this site — its purpose, main sections, URL structure, templates, or content conventions — call write_project_memory with the full updated markdown content.
+Do this proactively the first time you encounter a new site, or when you learn something durable that would help future sessions understand it better.
+Do NOT update it for routine content edits.
+
+## Recent Pages
+After every tool call that modifies a page's content, call update_recent_pages with the path and a single sentence summarising what changed.
+Call it once per page per response — if you modified multiple pages, call it once for each.
+`
+      : ''
+  }${mcpSection}${skillsSection}${agentSection}
 
 ## Skill Suggestions
 When you notice the user repeatedly asking for the same type of task across messages (e.g., applying the same formatting rules, following the same checklist, using the same content pattern), proactively suggest creating a reusable skill.
