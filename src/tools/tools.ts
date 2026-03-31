@@ -521,6 +521,7 @@ export function createDATools(
       },
     });
 
+    // Memory tools write to internal agent metadata paths — no user approval needed.
     tools.write_project_memory = tool({
       description:
         'Write or update the long-lived project memory for this site. ' +
@@ -528,7 +529,10 @@ export function createDATools(
         'main sections, URL structure, templates, or content conventions. ' +
         'Pass the full updated markdown content each time.',
       inputSchema: z.object({
-        content: z.string().describe('Full markdown content to write to the project memory file.'),
+        content: z
+          .string()
+          .min(1)
+          .describe('Full markdown content to write to the project memory file.'),
       }),
       execute: async ({ content }) => {
         if (!ctxOrg || !ctxRepo) return { error: 'No org/site context available' };
