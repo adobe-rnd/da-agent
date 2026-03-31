@@ -544,20 +544,24 @@ export function createDATools(
 
     tools.update_recent_pages = tool({
       description:
-        'Record that a page was changed or processed in this session. ' +
+        'Record that a page was modified in this session. ' +
         "Call this once per page after every tool call that modifies a page's content. " +
         'If multiple pages were modified in one response, call once for each page.',
       inputSchema: z.object({
-        org: z.string().describe('Organization identifier'),
-        site: z.string().describe('Site/repo identifier'),
         path: z.string().describe('Page path (e.g. "/en/blog/post.html")'),
         summary: z
           .string()
-          .describe('One short sentence describing what changed or was done on this page.'),
+          .describe('One short sentence describing what was modified on this page.'),
       }),
-      execute: async ({ org, site, path, summary }) => {
+      execute: async ({ path, summary }) => {
+        if (!ctxOrg || !ctxRepo) return { error: 'No org/site context available' };
         try {
-          const result = await updateRecentPages(client, org, site, { org, site, path, summary });
+          const result = await updateRecentPages(client, ctxOrg, ctxRepo, {
+            org: ctxOrg,
+            site: ctxRepo,
+            path,
+            summary,
+          });
           if (!result.success) return { error: result.error };
           return { recorded: true };
         } catch (e) {
