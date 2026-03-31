@@ -641,6 +641,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       activeAgent,
       agentSkillContents,
       projectMemory,
+      !!adminClient,
     ),
     messages: modelMessages as ModelMessage[],
     tools: allTools,
@@ -715,6 +716,7 @@ function buildSystemPrompt(
   activeAgent?: AgentPreset | null,
   agentSkillContents?: Record<string, string>,
   projectMemory?: string | null,
+  hasAdminClient?: boolean,
 ): string {
   const mcpSection = buildMCPPromptSection(mcpConfig);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
@@ -888,9 +890,9 @@ Use this context to better understand the site before taking any actions.
 `
       : ''
   }${
-    pageContext
+    hasAdminClient && pageContext
       ? `
-## Project Memory
+## Memory Instructions
 When you discover significant information about this site — its purpose, main sections, URL structure, templates, or content conventions — call write_project_memory with the full updated markdown content.
 Do this proactively the first time you encounter a new site, or when you learn something durable that would help future sessions understand it better.
 Do NOT update it for routine content edits.
