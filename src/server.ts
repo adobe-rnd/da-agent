@@ -14,6 +14,7 @@ import { loadAgentPreset } from './agents/loader.js';
 import type { AgentPreset } from './agents/loader.js';
 import { connectAndRegisterMCPTools } from './mcp/tool-adapter.js';
 import { MCPClient } from './mcp/client.js';
+import { fetchProjectMemory } from './memory/loader.js';
 import {
   detectSessionUserPattern,
   formatSessionPatternForPrompt,
@@ -470,6 +471,11 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   const edsClient = imsToken ? new EDSAdminClient({ apiToken: imsToken }) : null;
 
+  const projectMemory =
+    adminClient && pageContext
+      ? await fetchProjectMemory(adminClient, pageContext.org, pageContext.site)
+      : null;
+
   const daTools = createDATools(adminClient, {
     pageContext: pageContext ?? undefined,
     collab: collab ?? undefined,
@@ -643,6 +649,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       skillsIndex,
       activeAgent,
       agentSkillContents,
+      projectMemory,
       sessionPattern,
     ),
     messages: modelMessages as ModelMessage[],
@@ -717,6 +724,7 @@ function buildSystemPrompt(
   skillsIndex?: SkillsIndex | null,
   activeAgent?: AgentPreset | null,
   agentSkillContents?: Record<string, string>,
+  projectMemory?: string | null,
   sessionPattern?: SessionUserPattern | null,
 ): string {
   const mcpSection = buildMCPPromptSection(mcpConfig);
@@ -879,7 +887,29 @@ The user is in the document editor. Apply these rules for EVERY message in this 
     : ''
 }`
     : ''
-}${mcpSection}${skillsSection}${agentSection}
+}${
+    projectMemory
+      ? `
+## Project Memory
+The following is long-lived memory about this site, accumulated from previous sessions:
+
+${projectMemory}
+
+Use this context to better understand the site before taking any actions.
+`
+      : ''
+  }${
+    pageContext
+      ? `
+## Memory Instructions
+At the end of every response where you have learned something about this site, you MUST call write_project_memory to persist what you know.
+This includes: answering questions about the site structure, listing pages, reading content to understand the site, or any interaction that reveals the site's purpose, main sections, URL patterns, templates, or content conventions.
+Always write the full updated markdown — include everything you know, not just what changed.
+IMPORTANT: Writing about what you learned in your text response does NOT save it. Only an actual write_project_memory tool call saves to memory. Never say "I've saved this" or "I'll remember this" without calling the tool.
+Do NOT call it for pure content edits where you learned nothing new about the site's structure.
+`
+      : ''
+  }${mcpSection}${skillsSection}${agentSection}
 
 ## Skill Suggestions
 The server may append **Session pattern detected** when it automatically finds several similar user messages in this thread (any topic — not a fixed list). When that section is present, you MUST output the \`[SKILL_SUGGESTION]\` block in the same reply.
