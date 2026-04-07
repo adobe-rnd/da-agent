@@ -60,8 +60,9 @@ type PageContext = z.infer<typeof PageContextSchema>;
 
 /** Built-in MCP servers per environment, always added to every chat request. */
 const GOVERNANCE_AGENT_INSTRUCTIONS = `\
-When running evaluations with the governance-agent, always use the **Live Preview URL** as the page URL to evaluate. \
-The Live Preview URL always reflects the current state of the document without requiring any preview or publish operation.`;
+Always use the **Live Preview URL** when interacting with the governance-agent — for both page evaluations and guideline retrieval. \
+It always reflects the current document state without any preview/publish step needed.
+"My/the brand guidelines" means guidelines for the current site, not the whole organization, unless the user says otherwise.`;
 
 const BUILT_IN_MCP_SERVERS: Record<string, Record<string, BuiltInMCPServerConfig>> = {
   production: {
