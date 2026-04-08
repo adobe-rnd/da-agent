@@ -22,9 +22,9 @@ The page has been updated with the new hero section.
 
 ## 2. Rich List (`:::list`)
 
-**Description:** A styled bullet list using the custom `:::list` fence block.
+**Description:** A styled bullet list using the custom `:::list` fence block. This is the general-purpose list format; file/directory listings and version history are common variations of the same block.
 
-**Example:**
+**Example — generic list:**
 ```
 :::list
 - Item one
@@ -33,9 +33,27 @@ The page has been updated with the new hero section.
 :::
 ```
 
+**Example — file / directory listing** (`content_list` tool, `src/tools/tools.ts`):
+```
+:::list
+- `/blog/index` (page)
+- `/blog/2024/` (folder)
+- `/blog/2023/` (folder)
+:::
+```
+
+**Example — version history** (`content_version_list` tool, `src/tools/tools.ts`):
+```
+:::list
+- **v3** – "Pre-launch freeze" (2024-03-10)
+- **v2** – "Added hero image" (2024-02-28)
+- **v1** – Initial version (2024-02-15)
+:::
+```
+
 **Source:** `src/server.ts:752-797` — Rich response formatting section describes `:::list` as a block for visual styling of lists.
 
-**When triggered:** Summarizing multiple pages, files, results, or options — e.g., "What pages are in this site?"
+**When triggered:** Summarizing multiple pages, files, results, or options — e.g., "What pages are in this site?", "What's in this folder?", "Show me the version history."
 
 ---
 
@@ -279,26 +297,7 @@ The "Blog Editor" agent has been created. It will automatically load the `publis
 
 ---
 
-## 15. Version History List
-
-**Description:** A list of page versions with labels and timestamps.
-
-**Example:**
-```
-:::list
-- **v3** – "Pre-launch freeze" (2024-03-10)
-- **v2** – "Added hero image" (2024-02-28)
-- **v1** – Initial version (2024-02-15)
-:::
-```
-
-**Source:** `src/tools/tools.ts` — `content_version_list` tool returns version data. `src/server.ts:752-797` — List formatting applies.
-
-**When triggered:** User asks "show me the version history" or "what versions exist for this page?"
-
----
-
-## 16. Error / Failure Message (Prose)
+## 15. Error / Failure Message (Prose)
 
 **Description:** A plain-text explanation of why something could not be done.
 
@@ -313,26 +312,7 @@ The page at `/blog/old-post` could not be deleted because it is still published 
 
 ---
 
-## 17. File / Directory Listing
-
-**Description:** A list of files and folders at a given path.
-
-**Example:**
-```
-:::list
-- `/blog/index` (page)
-- `/blog/2024/` (folder)
-- `/blog/2023/` (folder)
-:::
-```
-
-**Source:** `src/tools/tools.ts` — `content_list` tool; `src/server.ts:752-797` — `:::list` formatting.
-
-**When triggered:** User asks "what's in this folder?", "list all pages under /blog", or agent explores a path.
-
----
-
-## 18. Disambiguation / Clarifying Question
+## 16. Disambiguation / Clarifying Question
 
 **Description:** A short prose question asking the user to clarify intent before acting.
 
@@ -352,7 +332,7 @@ Did you want me to update the **hero block** text, or the **metadata title** fie
 | Output Type | Custom Fence | Markdown | Prose | Source (key file:lines) |
 |---|---|---|---|---|
 | Plain prose confirmation | — | — | Yes | `server.ts:869-886` |
-| Rich list | `:::list` | — | — | `server.ts:752-797` |
+| Rich list (incl. file listings & version history) | `:::list` | — | — | `server.ts:752-797`, `tools.ts` (content_list, content_version_list) |
 | Checklist | `:::checklist` | — | — | `server.ts:752-797` |
 | Info alert | `:::alert-info` | — | — | `server.ts:752-797` |
 | Warning alert | `:::alert-warning` | — | — | `server.ts:752-797` |
@@ -365,7 +345,5 @@ Did you want me to update the **hero block** text, or the **metadata title** fie
 | Project memory (markdown) | — | Full md | — | `server.ts:891-910` |
 | Skill content (markdown) | — | Full md | — | `tools.ts:459-482` |
 | Agent preset confirmation | — | — | Yes | `tools.ts` (da_create_agent) |
-| Version history list | `:::list` | — | — | `tools.ts` (content_version_list) |
 | Error / failure message | `:::alert-error` / prose | — | Yes | `server.ts:733-750` |
-| File / directory listing | `:::list` | — | — | `tools.ts` (content_list) |
 | Disambiguating question | — | — | Yes | `server.ts:869-886` |
