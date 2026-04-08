@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/adobe-rnd/da-agent/compare/v1.11.0...v1.12.0) (2026-04-08)
+
+
+### Features
+
+* Connect to the governance agent ([#16](https://github.com/adobe-rnd/da-agent/issues/16)) ([c4882e5](https://github.com/adobe-rnd/da-agent/commit/c4882e564d78edbd6683457406143ecaae651a12))
+
 # [1.11.0](https://github.com/adobe-rnd/da-agent/compare/v1.10.1...v1.11.0) (2026-03-31)
 
 
