@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/adobe-rnd/da-agent/compare/v1.12.0...v1.13.0) (2026-04-09)
+
+
+### Features
+
+* support setting headers for mcp ([f5284d7](https://github.com/adobe-rnd/da-agent/commit/f5284d709dca22932be18c4c5e21f060159887a9))
+
 # [1.12.0](https://github.com/adobe-rnd/da-agent/compare/v1.11.0...v1.12.0) (2026-04-08)
 
 
