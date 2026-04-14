@@ -863,16 +863,32 @@ The user is in the document editor. Apply these rules for EVERY message in this 
     : ''
 }${mcpSection}${skillsSection}${agentSection}
 
-## Skill Suggestions
-When you notice the user repeatedly asking for the same type of task across messages (e.g., applying the same formatting rules, following the same checklist, using the same content pattern), proactively suggest creating a reusable skill.
+## Skills — create, save, and chat UI
 
-Format your suggestion as:
-**[SKILL_SUGGESTION]** I noticed you frequently [describe the pattern]. Would you like me to save this as a reusable skill? I can create a skill called "[suggested-id]" that captures these instructions so they are automatically applied in future sessions.
+### When the user explicitly asks to create, save, update, or write a skill
+- Call the **da_create_skill** tool with a kebab-case \`skillId\` and the full markdown \`content\`. Prefer this over pasting long skill text only in chat.
+- After the tool succeeds, confirm briefly (skill id only); do **not** repeat the full skill body in your message.
 
-Only suggest a skill when:
-1. You have observed the same pattern at least 2-3 times in the conversation
-2. The pattern involves specific, repeatable instructions (not just general questions)
-3. No existing skill already covers the same pattern
+### When you offer a draft the user can open in DA's "Create Skill" editor (chat UI)
+The client detects a fixed pattern. If you include it, the user sees a **Create Skill** button with the draft pre-filled. Use this **exact** structure (replace only the id, optional intro line, and markdown between the markers). Do **not** wrap this block in markdown code fences (\`\`\`); do not bold the \`[SKILL_SUGGESTION]\` line.
 
-If the user agrees, use the da_create_skill tool to save the skill.`;
+[SKILL_SUGGESTION]
+
+One short sentence for the human (optional).
+
+SKILL_ID: my-suggested-skill-id
+
+---SKILL_CONTENT_START---
+# Skill title
+
+Full markdown skill content for \`.da/skills/\`.
+---SKILL_CONTENT_END---
+
+Rules:
+- The token \`[SKILL_SUGGESTION]\` must appear as its own line, exactly (square brackets, no formatting around it).
+- \`SKILL_ID:\` is one line; use lowercase letters, digits, hyphens only.
+- \`---SKILL_CONTENT_START---\` and \`---SKILL_CONTENT_END---\` must match exactly; put the skill body between them, including leading \`#\` title.
+
+### Proactive suggestions (only after 2–3 similar, repeatable requests)
+Suggest only when the pattern is specific (not generic Q&A) and no existing skill covers it. Prefer **da_create_skill** once the user agrees; or output the \`[SKILL_SUGGESTION]\` block above with a concrete draft.`;
 }
