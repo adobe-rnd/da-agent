@@ -440,7 +440,7 @@ export function createDATools(
 
     tools.da_create_skill = tool({
       description:
-        'Create or update a skill in the repo (markdown under .da/skills/). Call this whenever ' +
+        'Create or update a skill in the DA site config `skills` sheet (key + markdown content). Call this whenever ' +
         'the user asks to create, save, write, or persist a skill — it is the primary deterministic ' +
         'path (structured skillId + content). Skills can reference MCP tools by name ' +
         '(e.g., mcp__<serverId>__<toolName>). Do not rely on chat-only prose to save skills.',

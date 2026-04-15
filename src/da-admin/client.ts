@@ -334,4 +334,26 @@ export class DAAdminClient {
       body: formData,
     });
   }
+
+  /**
+   * Read site multi-sheet config (KV) — same JSON as DA `/config/{org}/{site}/`.
+   */
+  async getSiteConfig(org: string, site: string): Promise<Record<string, unknown>> {
+    const endpoint = `/config/${org}/${site}/`;
+    return this.request<Record<string, unknown>>(endpoint);
+  }
+
+  /**
+   * Write site multi-sheet config (FormData with `config` JSON string).
+   */
+  async saveSiteConfig(
+    org: string,
+    site: string,
+    config: Record<string, unknown>,
+  ): Promise<unknown> {
+    const endpoint = `/config/${org}/${site}/`;
+    const formData = new FormData();
+    formData.append('config', JSON.stringify(config));
+    return this.request(endpoint, { method: 'POST', body: formData });
+  }
 }
