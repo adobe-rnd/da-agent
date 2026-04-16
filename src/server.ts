@@ -14,6 +14,13 @@ import { loadAgentPreset } from './agents/loader.js';
 import type { AgentPreset } from './agents/loader.js';
 import { connectAndRegisterMCPTools } from './mcp/tool-adapter.js';
 import { MCPClient } from './mcp/client.js';
+import {
+  loadApprovedGeneratedTools,
+  loadGeneratedToolsIndex,
+  buildGeneratedToolsPromptSection,
+  type GeneratedToolsIndex,
+} from './generated-tools/loader.js';
+import { callSandbox } from './generated-tools/sandbox-client.js';
 import { fetchProjectMemory } from './memory/loader.js';
 import {
   detectSessionUserPattern,
@@ -93,6 +100,8 @@ const ChatRequestSchema = z.object({
   mcpServers: z.record(z.string(), z.string()).optional(),
   /** Optional HTTP headers per server id (keys must match mcpServers). Sent on every MCP request to that URL. */
   mcpServerHeaders: z.record(z.string(), McpServerHeadersValueSchema).optional(),
+  /** Approved generated tool ids the client wants active for this request */
+  requestedGeneratedTools: z.array(z.string()).optional(),
   attachments: z
     .array(
       z.object({
@@ -722,10 +731,54 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     }
   }
 
+  // Load approved generated tool defs and register stubs (execution delegates to sandbox).
+  let generatedToolsIndex: GeneratedToolsIndex = { tools: [], source: 'none' };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const generatedToolStubs: Record<string, any> = {};
+  if (adminClient && pageContext && env.GENERATED_TOOLS_ENABLED === 'true') {
+    try {
+      generatedToolsIndex = await loadGeneratedToolsIndex(
+        adminClient,
+        pageContext.org,
+        pageContext.site,
+      );
+      const activeDefs = await loadApprovedGeneratedTools(
+        adminClient,
+        pageContext.org,
+        pageContext.site,
+      );
+      const sandboxUrl: string | undefined = env.GENERATED_TOOLS_SANDBOX_URL;
+      activeDefs.forEach((def) => {
+        const toolName = `gen__${def.id}`;
+        generatedToolStubs[toolName] = {
+          description: def.description,
+          parameters: def.inputSchema,
+          // Execution is handled server-side: stub delegates to the sandbox Worker.
+          execute: async (args: Record<string, unknown>) =>
+            callSandbox(sandboxUrl, {
+              toolId: def.id,
+              org: pageContext.org,
+              site: pageContext.site,
+              args,
+              imsToken: imsToken ?? undefined,
+            }),
+        };
+      });
+    } catch {
+      // Generated tools loading is best-effort; never blocks chat
+    }
+  }
+
   // Process any pending tool approvals before passing messages to streamText.
   // The AI SDK's needsApproval is designed for stateful sessions; since each request
   // creates a fresh streamText call, we resolve approvals here instead.
-  const allTools = { ...canvasClientTools, ...daTools, ...edsTools, ...mcpTools };
+  const allTools = {
+    ...canvasClientTools,
+    ...daTools,
+    ...edsTools,
+    ...mcpTools,
+    ...generatedToolStubs,
+  };
 
   const processedMessages = await resolveApprovals(messages, allTools);
   const strippedForModel = stripClientOnlyToolInputs(processedMessages);
@@ -770,6 +823,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       skillsIndex,
       activeAgent,
       agentSkillContents,
+      generatedToolsIndex,
       projectMemory,
       sessionPattern,
       env.ENVIRONMENT,
@@ -826,7 +880,7 @@ function buildSkillsPromptSection(skillsIndex?: SkillsIndex | null): string {
   if (!skillsIndex || skillsIndex.skills.length === 0) return '';
   const lines = skillsIndex.skills.map((s) => `- **${s.id}**: ${s.title}`).join('\n');
   return `\n\n## Available Skills
-The following skills are available for this ${skillsIndex.source === 'org' ? 'organization' : 'site'}. Use the da_get_skill tool to read a skill's full instructions before applying it.
+The following skills are stored in the DA config \`skills\` sheet for this site. Use the da_get_skill tool to read a skill's full instructions before applying it.
 ${lines}
 
 Skills may reference MCP tools by name. When applying a skill, read its full content first, then follow its instructions.`;
@@ -856,6 +910,7 @@ function buildSystemPrompt(
   skillsIndex?: SkillsIndex | null,
   activeAgent?: AgentPreset | null,
   agentSkillContents?: Record<string, string>,
+  generatedToolsIndex?: GeneratedToolsIndex | null,
   projectMemory?: string | null,
   sessionPattern?: SessionUserPattern | null,
   environment?: string,
@@ -864,10 +919,12 @@ function buildSystemPrompt(
   const mcpSection = buildMCPPromptSection(mcpConfig, builtInServers);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
   const agentSection = buildAgentPromptSection(activeAgent, agentSkillContents);
+  const generatedToolsSection = generatedToolsIndex
+    ? buildGeneratedToolsPromptSection(generatedToolsIndex)
+    : '';
   const pathForUrl = pageContext
     ? `/${pageContext.path.replace(/^\//, '').replace(/\.html$/, '')}`
     : '';
-
   return `You are a helpful assistant for Document Authoring (DA) authoring platform.
 You help users with questions about DA features, content authoring, and best practices.
 Use the available tools to search documentation and provide accurate information.
@@ -1055,26 +1112,42 @@ IMPORTANT: Writing about what you learned in your text response does NOT save it
 Do NOT call it for pure content edits where you learned nothing new about the site's structure.
 `
       : ''
-  }${mcpSection}${skillsSection}${agentSection}
+  }${mcpSection}${skillsSection}${agentSection}${generatedToolsSection}
 
 ## Skill Suggestions
 The server may append **Session pattern detected** when it automatically finds several similar user messages in this thread (any topic — not a fixed list). When that section is present, you MUST output the \`[SKILL_SUGGESTION]\` block in the same reply.
 
 When there is no server pattern block, you may still suggest a skill on your own if you notice repeated, specific instructions across messages and no existing skill covers them.
 
-Use this EXACT format — the UI will parse it to pre-fill the skill editor:
+### First offer / draft (preferred for new skills the user has not asked to persist yet)
+Use the \`[SKILL_SUGGESTION]\` block below so the client shows the **yellow in-chat card** with **Create Skill** and **Dismiss**. Do **not** call \`da_create_skill\` for that first offer—calling the tool skips that UX and is only for explicit persistence.
+
+### When the user clearly asks to save, write, or persist a skill to the config (no suggestion card needed)
+- Call **da_create_skill** with kebab-case \`skillId\` and full markdown \`content\`.
+- After the tool succeeds, confirm briefly (skill id only); do **not** repeat the full skill body in your message.
+
+### \`[SKILL_SUGGESTION]\` block — exact shape for the yellow "Create Skill" UI
+The client detects a fixed pattern. If you include it, the user sees **Create Skill** with the draft pre-filled. Use this **exact** structure (replace only the id, optional intro line, and markdown between the markers). Do **not** wrap this block in markdown code fences (\`\`\`); do not bold the \`[SKILL_SUGGESTION]\` line.
 
 [SKILL_SUGGESTION]
-SKILL_ID: suggested-skill-id
----SKILL_CONTENT_START---
-# Skill Title
 
-Instructions that fully describe what to do when this skill is active...
+One short sentence for the human (optional).
+
+SKILL_ID: my-suggested-skill-id
+
+---SKILL_CONTENT_START---
+# Skill title
+
+Full markdown skill content for the DA config \`skills\` sheet.
 ---SKILL_CONTENT_END---
 
-I noticed you've asked to [describe the pattern] multiple times. I've prepared a skill called "suggested-skill-id" — click **Create Skill** to save it for future sessions.
+Rules:
+- The token \`[SKILL_SUGGESTION]\` must appear as its own line, exactly (square brackets, no formatting around it).
+- \`SKILL_ID:\` is one line; use lowercase letters, digits, hyphens only.
+- \`---SKILL_CONTENT_START---\` and \`---SKILL_CONTENT_END---\` must match exactly; put the skill body between them, including leading \`#\` title.
 
-Do NOT use the da_create_skill tool — the user will save the skill via the UI.${
+### Proactive suggestions (only after 2–3 similar, repeatable requests)
+Suggest only when the pattern is specific (not generic Q&A) and no existing skill covers it. Output the \`[SKILL_SUGGESTION]\` block with a concrete draft first. Only call **da_create_skill** after the user clearly wants it written to the config without using the chat card.${
     sessionPattern ? formatSessionPatternForPrompt(sessionPattern) : ''
   }`;
 }

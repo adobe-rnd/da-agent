@@ -458,21 +458,25 @@ export function createDATools(
 
     tools.da_create_skill = tool({
       description:
-        'Create or update a skill. Skills are reusable markdown documents with instructions ' +
-        'that guide the assistant on specific tasks. They can reference MCP tools by name ' +
-        '(e.g., mcp__<serverId>__<toolName>). Use this when the user wants to save a set ' +
-        'of instructions as a reusable skill.',
+        'Create or update a skill in the DA site config `skills` sheet (key + markdown content). Call this whenever ' +
+        'the user asks to create, save, write, or persist a skill — it is the primary deterministic ' +
+        'path (structured skillId + content). Skills can reference MCP tools by name ' +
+        '(e.g., mcp__<serverId>__<toolName>). Do not rely on chat-only prose to save skills.',
       inputSchema: z.object({
         skillId: z
           .string()
           .describe('Skill identifier (lowercase alphanumeric with hyphens, e.g., "brand-voice")'),
         content: z.string().describe('Full markdown content of the skill'),
       }),
-      needsApproval: async () => true,
+      // Draft writes to the site config are already non-destructive for chat; requiring approval
+      // only showed a generic tool-approval card and blocked the nicer [SKILL_SUGGESTION] UX.
+      needsApproval: async () => false,
       execute: async ({ skillId, content }) => {
         if (!ctxOrg) return { error: 'No organization context available' };
         try {
-          const result = await saveSkillContent(client, ctxOrg, ctxRepo, skillId, content);
+          const result = await saveSkillContent(client, ctxOrg, ctxRepo, skillId, content, {
+            status: 'draft',
+          });
           if (!result.success) return { error: result.error };
           return { skillId, saved: true };
         } catch (e) {

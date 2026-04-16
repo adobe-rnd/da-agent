@@ -16,7 +16,7 @@ An AI assistant Cloudflare Worker for the [Document Authoring (DA)](https://da.l
 ## Architecture
 
 ```
-Client (DA authoring UI)
+Client (DA authoring UI or curl/scripts)
   │  POST /chat  (messages, pageContext, imsToken)
   ▼
 da-agent (Cloudflare Worker)
@@ -72,14 +72,33 @@ Start the dev server (connects to local `da-admin` and `da-collab` via service b
 npm run dev
 ```
 
-The worker is available at `http://localhost:5173`.
+The worker listens on **`http://127.0.0.1:4002`** (see `[dev] port` in `wrangler.toml`).
+
+### Invoking the agent from the command line
+
+There is no separate DA CLI for chat; you call **`POST /chat`** like the browser does. Use a **stage** Adobe IMS access token in `IMS_TOKEN` (same tier as localhost DA). The JSON field `imsToken` is what da-agent uses for DA Admin and EDS.
+
+```bash
+export IMS_TOKEN='eyJ...'   # stage IMS access token (JWT string)
+
+curl -sN -X POST 'http://127.0.0.1:4002/chat' \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -n \
+    --arg tok "$IMS_TOKEN" \
+    '{
+      imsToken: $tok,
+      pageContext: { org: "aemsites", site: "da-block-collection", path: "/index.html", view: "browse" },
+      messages: [
+        { role: "user", content: "Hello — summarize what DA tools I can use on this site." }
+      ]
+    }')"
+```
 
 ### Chat API
 
 ```
 POST /chat
 Content-Type: application/json
-Authorization: Bearer <ims-token>
 
 {
   "messages": [...],
@@ -89,9 +108,11 @@ Authorization: Bearer <ims-token>
     "path": "/docs/my-page",
     "view": "edit"
   },
-  "imsToken": "<ims-token>"
+  "imsToken": "<ims-access-token-jwt>"
 }
 ```
+
+`imsToken` is read from the JSON body (the browser chat client sends the same value). It is not taken from an `Authorization` header on `/chat`.
 
 Returns a streaming UI message response (Vercel AI SDK format).
 
