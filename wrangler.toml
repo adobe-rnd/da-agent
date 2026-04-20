@@ -7,6 +7,11 @@ compatibility_date = "2026-01-28"
 compatibility_flags = ["nodejs_compat"]
 keep_vars = true
 
+[[rules]]
+type = "Text"
+globs = ["**/*.md"]
+fallthrough = true
+
 [observability]
 enabled = true
 

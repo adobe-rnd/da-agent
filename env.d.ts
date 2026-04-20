@@ -62,6 +62,12 @@ declare namespace Cloudflare {
     GENERATED_TOOLS_ENABLED?: string;
     /** URL of the da-generated-tools-sandbox Worker (Phase 1+) */
     GENERATED_TOOLS_SANDBOX_URL?: string;
+    /** GitHub personal access token for creating repos and pushing code (web fragments workflow) */
+    GITHUB_TOKEN?: string;
+    /** Cloudflare API token for creating Pages projects (web fragments workflow) */
+    CF_API_TOKEN?: string;
+    /** Cloudflare account ID (web fragments workflow) */
+    CF_ACCOUNT_ID?: string;
   }
 }
 interface Env extends Cloudflare.Env {}

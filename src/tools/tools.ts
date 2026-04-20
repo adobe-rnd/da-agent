@@ -542,6 +542,92 @@ export function createDATools(
       },
     });
 
+    tools.da_embed_fragment = tool({
+      description:
+        'Embed a Web Fragment (standalone web app) into a DA page by inserting a ' +
+        '`web-fragment` EDS block into the page content. The block registers a Service Worker ' +
+        'that proxies fragment requests to the endpoint, so no separate gateway is needed. ' +
+        'The target site must have `sw.js` at its root and the `web-fragment` block implemented.',
+      inputSchema: z.object({
+        org: z.string().describe('Organization name'),
+        repo: z.string().describe('Repository name'),
+        path: z.string().describe('Page path where the fragment should be embedded'),
+        fragmentId: z.string().describe('Unique identifier for the fragment (e.g., "booking-app")'),
+        endpoint: z
+          .string()
+          .describe(
+            'HTTP origin of the fragment app (e.g., "http://localhost:4321" or CF Pages URL)',
+          ),
+        routes: z
+          .string()
+          .optional()
+          .describe(
+            'Comma-separated route patterns the SW should intercept (e.g., "/reservations, /__wf/booking/:_*"). ' +
+              'Defaults to /__wf/<fragmentId> if omitted.',
+          ),
+        channels: z
+          .string()
+          .optional()
+          .describe('Comma-separated BroadcastChannel names for fragment events'),
+        humanReadableSummary: z
+          .string()
+          .describe('Brief description of what fragment is being embedded and why'),
+      }),
+      needsApproval: async () => true,
+      execute: async ({
+        org,
+        repo,
+        path,
+        fragmentId,
+        endpoint,
+        routes,
+        channels,
+        humanReadableSummary,
+      }) => {
+        const pathWithExt = ensureHtmlExtension(path);
+        try {
+          const existing = await client.getSource(org, repo, pathWithExt);
+          const existingHtml = typeof existing === 'string' ? existing : (existing?.content ?? '');
+
+          const blockRows = [
+            `<div><div>fragment-id</div><div>${fragmentId}</div></div>`,
+            `<div><div>endpoint</div><div>${endpoint}</div></div>`,
+            routes ? `<div><div>routes</div><div>${routes}</div></div>` : '',
+            channels ? `<div><div>channels</div><div>${channels}</div></div>` : '',
+          ]
+            .filter(Boolean)
+            .join('\n        ');
+          const blockHtml = `\n    <div class="web-fragment">\n        ${blockRows}\n    </div>`;
+
+          const cleanedHtml = existingHtml.replace(
+            /\s*<div>\s*<div class="experience-builder">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>\s*<\/div>/g,
+            '',
+          );
+
+          let updatedHtml: string;
+          if (cleanedHtml.includes('</main>')) {
+            updatedHtml = cleanedHtml.replace('</main>', `${blockHtml}\n</main>`);
+          } else if (cleanedHtml.includes('</body>')) {
+            updatedHtml = cleanedHtml.replace('</body>', `${blockHtml}\n</body>`);
+          } else {
+            updatedHtml = cleanedHtml + blockHtml;
+          }
+
+          const result = await client.updateSource(org, repo, pathWithExt, updatedHtml);
+          recordPageChange(client, org, repo, pathWithExt, `Embedded web fragment: ${fragmentId}`);
+          return {
+            ...result,
+            fragmentId,
+            endpoint,
+            summary: humanReadableSummary,
+          };
+        } catch (e) {
+          if (isAPIError(e)) return { error: e.message, status: e.status };
+          return { error: String(e) };
+        }
+      },
+    });
+
     // Memory tools write to internal agent metadata paths — no user approval needed.
     tools.write_project_memory = tool({
       description:

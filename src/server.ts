@@ -4,6 +4,10 @@ import { z } from 'zod';
 import { DAAdminClient } from './da-admin/client.js';
 import { EDSAdminClient } from './eds-admin/client.js';
 import { createCanvasClientTools, createDATools, createEDSTools } from './tools/tools.js';
+import { createGitHubTools } from './tools/github-tools.js';
+import { createCloudflareTools } from './tools/cf-tools.js';
+import { createDevTools } from './tools/dev-tools.js';
+import BUILD_WEB_APP_SKILL from '../skills/build-web-app.md';
 import { ensureHtmlExtension } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
 import { initTelemetry, flushTelemetry } from './telemetry.js';
@@ -600,6 +604,12 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     },
   });
   const edsTools = edsClient ? createEDSTools(edsClient) : {};
+  const githubTools = env.GITHUB_TOKEN ? createGitHubTools(env.GITHUB_TOKEN) : {};
+  const cfTools =
+    env.CF_API_TOKEN && env.CF_ACCOUNT_ID
+      ? createCloudflareTools(env.CF_API_TOKEN, env.CF_ACCOUNT_ID)
+      : {};
+  const devTools = env.ENVIRONMENT === 'dev' ? createDevTools() : {};
   const canvasClientTools = createCanvasClientTools();
 
   // Build MCP config: user-provided servers merged with always-on built-in servers.
@@ -776,6 +786,9 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ...canvasClientTools,
     ...daTools,
     ...edsTools,
+    ...githubTools,
+    ...cfTools,
+    ...devTools,
     ...mcpTools,
     ...generatedToolStubs,
   };
@@ -828,6 +841,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       sessionPattern,
       env.ENVIRONMENT,
       builtInServers,
+      env.ENVIRONMENT === 'dev' || !!(env.GITHUB_TOKEN && env.CF_API_TOKEN && env.CF_ACCOUNT_ID),
     ),
     messages: modelMessages as ModelMessage[],
     tools: allTools,
@@ -904,6 +918,14 @@ function buildAgentPromptSection(
   return section;
 }
 
+function buildPlatformSkillsSection(hasWebFragmentTools: boolean): string {
+  if (!hasWebFragmentTools) return '';
+  return `\n\n## Platform Skills (always available)
+
+### Build Web App (Web Fragments)
+${BUILD_WEB_APP_SKILL}`;
+}
+
 function buildSystemPrompt(
   pageContext?: PageContext,
   mcpConfig?: { mcpServers: Record<string, MCPServerConfig>; toolAllowPatterns: string[] } | null,
@@ -915,6 +937,7 @@ function buildSystemPrompt(
   sessionPattern?: SessionUserPattern | null,
   environment?: string,
   builtInServers?: Record<string, BuiltInMCPServerConfig>,
+  hasWebFragmentTools?: boolean,
 ): string {
   const mcpSection = buildMCPPromptSection(mcpConfig, builtInServers);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
@@ -922,6 +945,7 @@ function buildSystemPrompt(
   const generatedToolsSection = generatedToolsIndex
     ? buildGeneratedToolsPromptSection(generatedToolsIndex)
     : '';
+  const platformSkillsSection = buildPlatformSkillsSection(!!hasWebFragmentTools);
   const pathForUrl = pageContext
     ? `/${pageContext.path.replace(/^\//, '').replace(/\.html$/, '')}`
     : '';
@@ -1112,7 +1136,7 @@ IMPORTANT: Writing about what you learned in your text response does NOT save it
 Do NOT call it for pure content edits where you learned nothing new about the site's structure.
 `
       : ''
-  }${mcpSection}${skillsSection}${agentSection}${generatedToolsSection}
+  }${mcpSection}${skillsSection}${agentSection}${generatedToolsSection}${platformSkillsSection}
 
 ## Skill Suggestions
 The server may append **Session pattern detected** when it automatically finds several similar user messages in this thread (any topic — not a fixed list). When that section is present, you MUST output the \`[SKILL_SUGGESTION]\` block in the same reply.
