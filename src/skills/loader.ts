@@ -150,8 +150,26 @@ export async function loadSkillContent(
   skillId: string,
 ): Promise<string | null> {
   const want = normalizeSkillId(skillId);
+  let configRow: SkillRow | undefined;
+  let hasConfigRow = false;
+  let configAllowsServing = true;
 
-  // Try .md file first — it's the canonical body when both exist
+  // Check config status first so draft rows cannot leak through file fallback.
+  try {
+    const cfg = await client.getSiteConfig(org, site);
+    const rows = rowsFromConfig(cfg);
+    configRow = rows.find((r) => normalizeSkillId(String(r.key ?? r.id ?? '')) === want);
+    hasConfigRow = Boolean(configRow);
+    if (configRow && skillRowStatus(configRow) === 'draft') {
+      configAllowsServing = false;
+    }
+  } catch {
+    // Best-effort: if config is unavailable, continue with file fallback.
+  }
+
+  if (!configAllowsServing) return null;
+
+  // Try .md file first when allowed — it's canonical when both exist.
   try {
     const src = await client.getSource(org, site, `${SKILLS_DIR}/${want}.md`);
     const text = typeof src === 'string' ? src : ((src as any)?.content ?? '');
@@ -160,18 +178,9 @@ export async function loadSkillContent(
     /* file may not exist — fall through to config */
   }
 
-  // Fall back to config sheet
-  try {
-    const cfg = await client.getSiteConfig(org, site);
-    const rows = rowsFromConfig(cfg);
-    const row = rows.find((r) => normalizeSkillId(String(r.key ?? r.id ?? '')) === want);
-    if (!row) return null;
-    if (skillRowStatus(row) === 'draft') return null;
-    const raw = String(row.content ?? row.value ?? row.body ?? '').trim();
-    return raw || null;
-  } catch {
-    return null;
-  }
+  if (!hasConfigRow || !configRow) return null;
+  const raw = String(configRow.content ?? configRow.value ?? configRow.body ?? '').trim();
+  return raw || null;
 }
 
 /**

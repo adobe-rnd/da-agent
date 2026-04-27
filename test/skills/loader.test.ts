@@ -198,6 +198,7 @@ describe('loadSkillContent', () => {
           },
         },
       },
+      files: { '.da/skills/wip.md': '# WIP FILE\n\nThis should not be returned.' },
     });
     const content = await loadSkillContent(client, 'org', 'mysite', 'wip');
     expect(content).toBeNull();
