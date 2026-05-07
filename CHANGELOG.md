@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/adobe-rnd/da-agent/compare/v1.14.1...v1.15.0) (2026-05-07)
+
+
+### Features
+
+* improve skill invocation ([#26](https://github.com/adobe-rnd/da-agent/issues/26)) ([c161d29](https://github.com/adobe-rnd/da-agent/commit/c161d29b7b9910357c767bbe26cda0f96b95a143))
+
 ## [1.14.1](https://github.com/adobe-rnd/da-agent/compare/v1.14.0...v1.14.1) (2026-04-27)
 
 
