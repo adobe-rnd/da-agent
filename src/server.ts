@@ -652,6 +652,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   // Load agent preset if specified
   let activeAgent: AgentPreset | null = null;
   let agentSkillContents: Record<string, string> = {};
+  let requestedSkillContents: Record<string, string> = {};
   if (adminClient && pageContext && agentId) {
     try {
       activeAgent = await loadAgentPreset(adminClient, pageContext.org, pageContext.site, agentId);
@@ -684,7 +685,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     if (adminClient && pageContext) {
       const entries = await Promise.all(
         requestedSkills.map(async (sid) => {
-          if (agentSkillContents[sid]) return null;
+          if (agentSkillContents[sid]) return [sid, agentSkillContents[sid]] as const;
           try {
             console.log(
               `[da-agent] loading skill "${sid}" for ${pageContext.org}/${pageContext.site}`,
@@ -706,8 +707,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
         }),
       );
       const loaded = Object.fromEntries(entries.filter(Boolean) as [string, string][]);
-      agentSkillContents = { ...agentSkillContents, ...loaded };
-      console.log('[da-agent] agentSkillContents keys:', Object.keys(agentSkillContents));
+      requestedSkillContents = { ...requestedSkillContents, ...loaded };
+      console.log('[da-agent] requestedSkillContents keys:', Object.keys(requestedSkillContents));
     } else {
       console.log(
         '[da-agent] cannot load skills: adminClient=',
@@ -828,6 +829,10 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       sessionPattern,
       env.ENVIRONMENT,
       builtInServers,
+      {
+        contents: requestedSkillContents,
+        missing: (requestedSkills ?? []).filter((id) => !requestedSkillContents[id]),
+      },
     ),
     messages: modelMessages as ModelMessage[],
     tools: allTools,
@@ -904,6 +909,33 @@ function buildAgentPromptSection(
   return section;
 }
 
+function buildRequestedSkillsSection(
+  requestedSkillContents?: Record<string, string>,
+  requestedSkills?: string[],
+): string {
+  const loaded = requestedSkillContents ?? {};
+  const notFound = (requestedSkills ?? []).filter((id) => !loaded[id]);
+
+  let section = '';
+
+  if (Object.keys(loaded).length > 0) {
+    const ids = Object.keys(loaded).map((id) => `"${id}"`).join(', ');
+    section += `\n\n## Explicitly Invoked Skill(s): ${ids}
+The user selected the above skill(s) via the slash command UI. Execute them immediately and precisely by following their instructions below. Do not interpret the skill name(s) based on your training knowledge — follow only the skill's specific steps as written.`;
+    for (const [id, content] of Object.entries(loaded)) {
+      section += `\n\n### Skill: ${id}\n${content}`;
+    }
+  }
+
+  if (notFound.length > 0) {
+    const missing = notFound.map((id) => `"${id}"`).join(', ');
+    section += `\n\n## Skill(s) Not Found: ${missing}
+The user invoked the above skill(s) via slash command, but no matching skill was found in the site's skill library. Inform the user that the skill could not be found and suggest they check the skill name or add it via the Manage Skills option.`;
+  }
+
+  return section;
+}
+
 function buildSystemPrompt(
   pageContext?: PageContext,
   mcpConfig?: { mcpServers: Record<string, MCPServerConfig>; toolAllowPatterns: string[] } | null,
@@ -915,10 +947,12 @@ function buildSystemPrompt(
   sessionPattern?: SessionUserPattern | null,
   environment?: string,
   builtInServers?: Record<string, BuiltInMCPServerConfig>,
+  requestedSkills?: { contents: Record<string, string>; missing: string[] },
 ): string {
   const mcpSection = buildMCPPromptSection(mcpConfig, builtInServers);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
   const agentSection = buildAgentPromptSection(activeAgent, agentSkillContents);
+  const requestedSkillsSection = buildRequestedSkillsSection(requestedSkills?.contents, requestedSkills?.missing);
   const generatedToolsSection = generatedToolsIndex
     ? buildGeneratedToolsPromptSection(generatedToolsIndex)
     : '';
@@ -1112,7 +1146,7 @@ IMPORTANT: Writing about what you learned in your text response does NOT save it
 Do NOT call it for pure content edits where you learned nothing new about the site's structure.
 `
       : ''
-  }${mcpSection}${skillsSection}${agentSection}${generatedToolsSection}
+  }${mcpSection}${skillsSection}${agentSection}${requestedSkillsSection}${generatedToolsSection}
 
 ## Skill Suggestions
 The server may append **Session pattern detected** when it automatically finds several similar user messages in this thread (any topic — not a fixed list). When that section is present, you MUST output the \`[SKILL_SUGGESTION]\` block in the same reply.
