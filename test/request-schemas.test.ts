@@ -67,6 +67,29 @@ describe('ChatRequestSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts attachment with contentUrl instead of dataBase64', () => {
+    const result = ChatRequestSchema.safeParse({
+      messages: [],
+      attachments: [
+        {
+          id: 'a1',
+          fileName: 'img.png',
+          mediaType: 'image/png',
+          contentUrl: 'https://da.live/source/org/site/img.png',
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects attachment with neither dataBase64 nor contentUrl', () => {
+    const result = ChatRequestSchema.safeParse({
+      messages: [],
+      attachments: [{ id: 'a1', fileName: 'f.txt', mediaType: 'text/plain' }],
+    });
+    expect(result.success).toBe(false);
+  });
+
   it('rejects attachment with empty id', () => {
     const result = ChatRequestSchema.safeParse({
       messages: [],

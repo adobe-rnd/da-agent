@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/adobe-rnd/da-agent/compare/v1.15.0...v1.16.0) (2026-05-08)
+
+
+### Features
+
+* support ref url for attachments ([#27](https://github.com/adobe-rnd/da-agent/issues/27)) ([3d0b73b](https://github.com/adobe-rnd/da-agent/commit/3d0b73b5e14d349f03519116dc257de026ca61b4))
+
 # [1.15.0](https://github.com/adobe-rnd/da-agent/compare/v1.14.1...v1.15.0) (2026-05-07)
 
 

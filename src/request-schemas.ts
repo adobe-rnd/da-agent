@@ -45,13 +45,20 @@ export const ChatRequestSchema = z.object({
   requestedGeneratedTools: z.array(z.string()).optional(),
   attachments: z
     .array(
-      z.object({
-        id: z.string().min(1),
-        fileName: z.string().min(1),
-        mediaType: z.string().min(1),
-        dataBase64: z.string().min(1),
-        sizeBytes: z.number().int().nonnegative().optional(),
-      }),
+      z
+        .object({
+          id: z.string().min(1),
+          fileName: z.string().min(1),
+          mediaType: z.string().min(1),
+          /** Raw bytes for first-time upload. Omit on approval continuations when the file is already uploaded. */
+          dataBase64: z.string().min(1).optional(),
+          /** DA storage URL returned by a previous content_upload call. Replaces dataBase64 on approval continuations. */
+          contentUrl: z.string().min(1).optional(),
+          sizeBytes: z.number().int().nonnegative().optional(),
+        })
+        .refine((a) => a.dataBase64 || a.contentUrl, {
+          message: 'Each attachment must have either dataBase64 or contentUrl',
+        }),
     )
     .optional(),
 });

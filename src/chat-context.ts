@@ -21,7 +21,8 @@ export interface Attachment {
   id: string;
   fileName: string;
   mediaType: string;
-  dataBase64: string;
+  dataBase64?: string;
+  contentUrl?: string;
   sizeBytes?: number;
 }
 
@@ -41,7 +42,9 @@ export interface ChatContext {
 export async function buildChatContext(body: ParsedBody, env: Env): Promise<ChatContext> {
   const { pageContext, imsToken, attachments = [] } = body;
 
-  const attachmentMap = new Map(attachments.map((a) => [a.id, a]));
+  const attachmentMap = new Map<string, Attachment>(
+    (attachments as Attachment[]).map((a) => [a.id, a]),
+  );
 
   const daOrigin = env.DA_ORIGIN ?? 'https://admin.da.live';
   const sourceUrl = `${daOrigin}/source/${pageContext?.org}/${pageContext?.site}/${ensureHtmlExtension(pageContext?.path ?? '')}`;

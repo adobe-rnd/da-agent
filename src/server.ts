@@ -176,6 +176,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     fileName: a.fileName,
     mediaType: a.mediaType,
     ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
+    ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
   }));
   const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
 

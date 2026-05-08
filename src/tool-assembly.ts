@@ -52,7 +52,7 @@ export async function assembleTools(
     repo: pageContext?.site,
     resolveAttachmentByRef: (attachmentRef: string) => {
       const hit = attachmentMap.get(attachmentRef);
-      if (!hit) return null;
+      if (!hit?.dataBase64) return null;
       return {
         base64Data: hit.dataBase64,
         mimeType: hit.mediaType,

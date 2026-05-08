@@ -137,6 +137,39 @@ describe('expandLatestUserAttachmentsForModel', () => {
     const result = expandLatestUserAttachmentsForModel(messages, []);
     expect(result[0].content).toBe('hi');
   });
+
+  it('separates pending and uploaded attachments in the prompt', () => {
+    const messages = [{ role: 'user', content: 'see files' }];
+    const meta = [
+      { id: 'a1', fileName: 'new.png', mediaType: 'image/png' },
+      {
+        id: 'a2',
+        fileName: 'old.png',
+        mediaType: 'image/png',
+        contentUrl: 'https://da.live/source/org/site/old.png',
+      },
+    ];
+    const result = expandLatestUserAttachmentsForModel(messages, meta);
+    expect(result[0].content).toContain('new.png');
+    expect(result[0].content).toContain('content_upload');
+    expect(result[0].content).toContain('Previously uploaded');
+    expect(result[0].content).toContain('https://da.live/source/org/site/old.png');
+  });
+
+  it('omits pending section when all attachments have contentUrl', () => {
+    const messages = [{ role: 'user', content: 'use them' }];
+    const meta = [
+      {
+        id: 'a1',
+        fileName: 'already.png',
+        mediaType: 'image/png',
+        contentUrl: 'https://da.live/source/org/site/already.png',
+      },
+    ];
+    const result = expandLatestUserAttachmentsForModel(messages, meta);
+    expect(result[0].content).not.toContain('call content_upload using attachmentRef');
+    expect(result[0].content).toContain('Previously uploaded');
+  });
 });
 
 describe('resolveApprovals', () => {

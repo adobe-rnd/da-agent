@@ -207,18 +207,36 @@ function formatAttachmentsForModel(
     fileName: string;
     mediaType: string;
     sizeBytes?: number;
+    contentUrl?: string;
   }>,
 ): string {
-  const lines: string[] = [
-    'The user attached file(s). Binary contents are not available in chat context.',
-    'If you need one for upload, call content_upload using attachmentRef from this list.',
-    '',
-    'Attached files:',
-  ];
-  items.forEach((item) => {
-    const size = typeof item.sizeBytes === 'number' ? `, ${item.sizeBytes} bytes` : '';
-    lines.push(`- [${item.id}] ${item.fileName} (${item.mediaType}${size})`);
-  });
+  const pending = items.filter((i) => !i.contentUrl);
+  const uploaded = items.filter((i) => i.contentUrl);
+  const lines: string[] = [];
+
+  if (pending.length > 0) {
+    lines.push(
+      'The user attached file(s). Binary contents are not available in chat context.',
+      'If you need one for upload, call content_upload using attachmentRef from this list.',
+      '',
+      'Attached files:',
+    );
+    pending.forEach((item) => {
+      const size = typeof item.sizeBytes === 'number' ? `, ${item.sizeBytes} bytes` : '';
+      lines.push(`- [${item.id}] ${item.fileName} (${item.mediaType}${size})`);
+    });
+  }
+
+  if (uploaded.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push(
+      'Previously uploaded files (already in DA storage — use contentUrl directly, do NOT call content_upload again):',
+    );
+    uploaded.forEach((item) => {
+      lines.push(`- ${item.fileName}: ${item.contentUrl}`);
+    });
+  }
+
   return lines.join('\n');
 }
 
@@ -229,6 +247,7 @@ export function expandLatestUserAttachmentsForModel(
     fileName: string;
     mediaType: string;
     sizeBytes?: number;
+    contentUrl?: string;
   }>,
 ): any[] {
   if (!Array.isArray(attachmentMeta) || attachmentMeta.length === 0) {
