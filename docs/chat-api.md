@@ -57,7 +57,9 @@ Optional array of file attachments accompanying the latest user message.
 | `contentUrl` | One of | DA storage URL from a prior `content_upload` result. Use when the file is already in storage. |
 | `sizeBytes` | No | File size in bytes. |
 
-Exactly one of `dataBase64` or `contentUrl` must be present — the schema rejects attachments with neither.
+At least one of `dataBase64` or `contentUrl` must be present — the schema rejects attachments with neither.
+
+**File type handling:** All file types are currently upload-only — the agent receives file metadata and can call `content_upload` to store the file in DA, but does not read binary content. 
 
 **Approval continuation pattern:** On the first POST, send `dataBase64`. If the agent pauses for approval after `content_upload` has run, re-send the attachment on the continuation POST with `contentUrl` (from the tool result) and omit `dataBase64`. If the approval pause happened before `content_upload` ran, re-send the original `dataBase64` unchanged.
 

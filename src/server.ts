@@ -104,18 +104,21 @@ const ChatRequestSchema = z.object({
   requestedGeneratedTools: z.array(z.string()).optional(),
   attachments: z
     .array(
-      z.object({
-        id: z.string().min(1),
-        fileName: z.string().min(1),
-        mediaType: z.string().min(1),
-        /** Raw bytes for first-time upload. Omit on approval continuations when the file is already uploaded. */
-        dataBase64: z.string().min(1).optional(),
-        /** DA storage URL returned by a previous content_upload call. Replaces dataBase64 on approval continuations. */
-        contentUrl: z.string().min(1).optional(),
-        sizeBytes: z.number().int().nonnegative().optional(),
-      }).refine((a: { dataBase64?: string; contentUrl?: string }) => a.dataBase64 || a.contentUrl, {
-        message: 'Each attachment must have either dataBase64 or contentUrl',
-      }),
+      z
+        .object({
+          id: z.string().min(1),
+          fileName: z.string().min(1),
+          mediaType: z.string().min(1),
+          /** Raw bytes for first-time upload. Omit on approval continuations when the file is already uploaded. */
+          dataBase64: z.string().min(1).optional(),
+          // WARNING: user-supplied string — do not forward to any external service without validation.
+          /** DA storage URL returned by a previous content_upload call. Replaces dataBase64 on approval continuations. */
+          contentUrl: z.string().min(1).optional(),
+          sizeBytes: z.number().int().nonnegative().optional(),
+        })
+        .refine((a) => a.dataBase64 || a.contentUrl, {
+          message: 'Each attachment must have either dataBase64 or contentUrl',
+        }),
     )
     .optional(),
 });
@@ -505,7 +508,9 @@ function formatAttachmentsForModel(
 
   if (uploaded.length > 0) {
     if (lines.length > 0) lines.push('');
-    lines.push('Previously uploaded files (already in DA storage — use contentUrl directly, do NOT call content_upload again):');
+    lines.push(
+      'Previously uploaded files (already in DA storage — use contentUrl directly, do NOT call content_upload again):',
+    );
     uploaded.forEach((item) => {
       lines.push(`- ${item.fileName}: ${item.contentUrl}`);
     });
@@ -588,7 +593,9 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     attachments = [],
   } = parsed.data;
 
-  const attachmentMap = new Map<string, AttachmentItem>((attachments as AttachmentItem[]).map((a) => [a.id, a]));
+  const attachmentMap = new Map<string, AttachmentItem>(
+    (attachments as AttachmentItem[]).map((a) => [a.id, a]),
+  );
 
   const bedrock = createAmazonBedrock({
     region: env.AWS_REGION,
@@ -951,7 +958,9 @@ function buildRequestedSkillsSection(
   let section = '';
 
   if (Object.keys(loaded).length > 0) {
-    const ids = Object.keys(loaded).map((id) => `"${id}"`).join(', ');
+    const ids = Object.keys(loaded)
+      .map((id) => `"${id}"`)
+      .join(', ');
     section += `\n\n## Explicitly Invoked Skill(s): ${ids}
 The user selected the above skill(s) via the slash command UI. Execute them immediately and precisely by following their instructions below. Do not interpret the skill name(s) based on your training knowledge — follow only the skill's specific steps as written.`;
     for (const [id, content] of Object.entries(loaded)) {
@@ -984,7 +993,10 @@ function buildSystemPrompt(
   const mcpSection = buildMCPPromptSection(mcpConfig, builtInServers);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
   const agentSection = buildAgentPromptSection(activeAgent, agentSkillContents);
-  const requestedSkillsSection = buildRequestedSkillsSection(requestedSkills?.contents, requestedSkills?.missing);
+  const requestedSkillsSection = buildRequestedSkillsSection(
+    requestedSkills?.contents,
+    requestedSkills?.missing,
+  );
   const generatedToolsSection = generatedToolsIndex
     ? buildGeneratedToolsPromptSection(generatedToolsIndex)
     : '';
