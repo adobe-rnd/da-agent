@@ -10,6 +10,7 @@ import { initTelemetry, flushTelemetry } from './telemetry.js';
 import type { MCPServerConfig, BuiltInMCPServerConfig } from './mcp/types.js';
 import { loadSkillsIndex, loadSkillContent } from './skills/loader.js';
 import type { SkillsIndex } from './skills/loader.js';
+import { loadDisabledTools, applyToolOverrides } from './tools/tool-overrides.js';
 import { loadAgentPreset } from './agents/loader.js';
 import type { AgentPreset } from './agents/loader.js';
 import { connectAndRegisterMCPTools } from './mcp/tool-adapter.js';
@@ -781,6 +782,16 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ...generatedToolStubs,
   };
 
+  if (adminClient && pageContext) {
+    const disabled = await loadDisabledTools(adminClient, pageContext.org, pageContext.site);
+    if (disabled.size > 0) {
+      const removed = applyToolOverrides(allTools, disabled);
+      if (removed.length > 0) {
+        console.log('[da-agent] tool overrides removed:', removed);
+      }
+    }
+  }
+
   const processedMessages = await resolveApprovals(messages, allTools);
   const strippedForModel = stripClientOnlyToolInputs(processedMessages);
   let sessionPattern: SessionUserPattern | null = null;
@@ -919,7 +930,9 @@ function buildRequestedSkillsSection(
   let section = '';
 
   if (Object.keys(loaded).length > 0) {
-    const ids = Object.keys(loaded).map((id) => `"${id}"`).join(', ');
+    const ids = Object.keys(loaded)
+      .map((id) => `"${id}"`)
+      .join(', ');
     section += `\n\n## Explicitly Invoked Skill(s): ${ids}
 The user selected the above skill(s) via the slash command UI. Execute them immediately and precisely by following their instructions below. Do not interpret the skill name(s) based on your training knowledge — follow only the skill's specific steps as written.`;
     for (const [id, content] of Object.entries(loaded)) {
@@ -952,7 +965,10 @@ function buildSystemPrompt(
   const mcpSection = buildMCPPromptSection(mcpConfig, builtInServers);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
   const agentSection = buildAgentPromptSection(activeAgent, agentSkillContents);
-  const requestedSkillsSection = buildRequestedSkillsSection(requestedSkills?.contents, requestedSkills?.missing);
+  const requestedSkillsSection = buildRequestedSkillsSection(
+    requestedSkills?.contents,
+    requestedSkills?.missing,
+  );
   const generatedToolsSection = generatedToolsIndex
     ? buildGeneratedToolsPromptSection(generatedToolsIndex)
     : '';
