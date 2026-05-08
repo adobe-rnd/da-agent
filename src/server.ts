@@ -104,18 +104,35 @@ const ChatRequestSchema = z.object({
   requestedGeneratedTools: z.array(z.string()).optional(),
   attachments: z
     .array(
-      z.object({
-        id: z.string().min(1),
-        fileName: z.string().min(1),
-        mediaType: z.string().min(1),
-        dataBase64: z.string().min(1),
-        sizeBytes: z.number().int().nonnegative().optional(),
-      }),
+      z
+        .object({
+          id: z.string().min(1),
+          fileName: z.string().min(1),
+          mediaType: z.string().min(1),
+          /** Raw bytes for first-time upload. Omit on approval continuations when the file is already uploaded. */
+          dataBase64: z.string().min(1).optional(),
+          // WARNING: user-supplied string — do not forward to any external service without validation.
+          /** DA storage URL returned by a previous content_upload call. Replaces dataBase64 on approval continuations. */
+          contentUrl: z.string().min(1).optional(),
+          sizeBytes: z.number().int().nonnegative().optional(),
+        })
+        .refine((a) => a.dataBase64 || a.contentUrl, {
+          message: 'Each attachment must have either dataBase64 or contentUrl',
+        }),
     )
     .optional(),
 });
 
 type PageContext = z.infer<typeof PageContextSchema>;
+
+type AttachmentItem = {
+  id: string;
+  fileName: string;
+  mediaType: string;
+  dataBase64?: string;
+  contentUrl?: string;
+  sizeBytes?: number;
+};
 
 /** Built-in MCP servers per environment, always added to every chat request. */
 const GOVERNANCE_AGENT_INSTRUCTIONS = `\
@@ -469,18 +486,36 @@ function formatAttachmentsForModel(
     fileName: string;
     mediaType: string;
     sizeBytes?: number;
+    contentUrl?: string;
   }>,
 ): string {
-  const lines: string[] = [
-    'The user attached file(s). Binary contents are not available in chat context.',
-    'If you need one for upload, call content_upload using attachmentRef from this list.',
-    '',
-    'Attached files:',
-  ];
-  items.forEach((item) => {
-    const size = typeof item.sizeBytes === 'number' ? `, ${item.sizeBytes} bytes` : '';
-    lines.push(`- [${item.id}] ${item.fileName} (${item.mediaType}${size})`);
-  });
+  const pending = items.filter((i) => !i.contentUrl);
+  const uploaded = items.filter((i) => i.contentUrl);
+  const lines: string[] = [];
+
+  if (pending.length > 0) {
+    lines.push(
+      'The user attached file(s). Binary contents are not available in chat context.',
+      'If you need one for upload, call content_upload using attachmentRef from this list.',
+      '',
+      'Attached files:',
+    );
+    pending.forEach((item) => {
+      const size = typeof item.sizeBytes === 'number' ? `, ${item.sizeBytes} bytes` : '';
+      lines.push(`- [${item.id}] ${item.fileName} (${item.mediaType}${size})`);
+    });
+  }
+
+  if (uploaded.length > 0) {
+    if (lines.length > 0) lines.push('');
+    lines.push(
+      'Previously uploaded files (already in DA storage — use contentUrl directly, do NOT call content_upload again):',
+    );
+    uploaded.forEach((item) => {
+      lines.push(`- ${item.fileName}: ${item.contentUrl}`);
+    });
+  }
+
   return lines.join('\n');
 }
 
@@ -491,6 +526,7 @@ function expandLatestUserAttachmentsForModel(
     fileName: string;
     mediaType: string;
     sizeBytes?: number;
+    contentUrl?: string;
   }>,
 ): any[] {
   if (!Array.isArray(attachmentMeta) || attachmentMeta.length === 0) {
@@ -557,7 +593,9 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     attachments = [],
   } = parsed.data;
 
-  const attachmentMap = new Map(attachments.map((a) => [a.id, a]));
+  const attachmentMap = new Map<string, AttachmentItem>(
+    (attachments as AttachmentItem[]).map((a) => [a.id, a]),
+  );
 
   const bedrock = createAmazonBedrock({
     region: env.AWS_REGION,
@@ -591,7 +629,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     repo: pageContext?.site,
     resolveAttachmentByRef: (attachmentRef: string) => {
       const hit = attachmentMap.get(attachmentRef);
-      if (!hit) return null;
+      if (!hit?.dataBase64) return null;
       return {
         base64Data: hit.dataBase64,
         mimeType: hit.mediaType,
@@ -793,6 +831,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     fileName: a.fileName,
     mediaType: a.mediaType,
     ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
+    ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
   }));
   const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
 
@@ -919,7 +958,9 @@ function buildRequestedSkillsSection(
   let section = '';
 
   if (Object.keys(loaded).length > 0) {
-    const ids = Object.keys(loaded).map((id) => `"${id}"`).join(', ');
+    const ids = Object.keys(loaded)
+      .map((id) => `"${id}"`)
+      .join(', ');
     section += `\n\n## Explicitly Invoked Skill(s): ${ids}
 The user selected the above skill(s) via the slash command UI. Execute them immediately and precisely by following their instructions below. Do not interpret the skill name(s) based on your training knowledge — follow only the skill's specific steps as written.`;
     for (const [id, content] of Object.entries(loaded)) {
@@ -952,7 +993,10 @@ function buildSystemPrompt(
   const mcpSection = buildMCPPromptSection(mcpConfig, builtInServers);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
   const agentSection = buildAgentPromptSection(activeAgent, agentSkillContents);
-  const requestedSkillsSection = buildRequestedSkillsSection(requestedSkills?.contents, requestedSkills?.missing);
+  const requestedSkillsSection = buildRequestedSkillsSection(
+    requestedSkills?.contents,
+    requestedSkills?.missing,
+  );
   const generatedToolsSection = generatedToolsIndex
     ? buildGeneratedToolsPromptSection(generatedToolsIndex)
     : '';
