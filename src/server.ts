@@ -481,7 +481,7 @@ async function handleMcpToolsList(request: Request): Promise<Response> {
 }
 
 function isMarkdown(item: { mediaType: string; fileName: string }): boolean {
-  return item.mediaType === 'text/markdown' || item.fileName.endsWith('.md');
+  return item.mediaType === 'text/markdown' || item.fileName.toLowerCase().endsWith('.md');
 }
 
 function formatAttachmentsForModel(
@@ -501,8 +501,16 @@ function formatAttachmentsForModel(
   const readable = pending.filter((i) => isMarkdown(i) && i.dataBase64);
   const uploadOnly = pending.filter((i) => !isMarkdown(i) || !i.dataBase64);
 
+  // TODO: skip inlining if sizeBytes exceeds a threshold (e.g. 50 KB) to avoid bloating the context window
   readable.forEach((item) => {
-    const content = globalThis.atob(item.dataBase64!);
+    let content: string;
+    try {
+      const bytes = Uint8Array.from(globalThis.atob(item.dataBase64!), (c) => c.charCodeAt(0));
+      content = new TextDecoder().decode(bytes);
+    } catch {
+      uploadOnly.push(item);
+      return;
+    }
     lines.push(
       `Attached markdown file: ${item.fileName}`,
       '---',
@@ -628,8 +636,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const sourceUrl = `${daOrigin}/source/${pageContext?.org}/${pageContext?.site}/${ensureHtmlExtension(pageContext?.path ?? '')}`;
 
   const collab =
-    isCollabEligibleView(pageContext?.view) && imsToken && env.DACOLLAB
-      ? await createCollabClient(sourceUrl, imsToken, pageContext?.org ?? '', env.DACOLLAB)
+    isCollabEligibleView(pageContext?.view) && imsToken && env.DACOLLAB && pageContext
+      ? await createCollabClient(sourceUrl, imsToken, pageContext.org, env.DACOLLAB)
       : null;
 
   const adminClient =
@@ -848,7 +856,15 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     sessionPattern = detectSessionUserPattern(strippedForModel);
   }
   const withSelectionContext = expandUserSelectionContextForModel(strippedForModel);
-  const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachments);
+  const attachmentMeta = attachments.map((a) => ({
+    id: a.id,
+    fileName: a.fileName,
+    mediaType: a.mediaType,
+    dataBase64: a.dataBase64,
+    ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
+    ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
+  }));
+  const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
 
   const cleanupMCP = () => {
     mcpClients.forEach((c) => {
