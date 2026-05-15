@@ -1,10 +1,6 @@
 /**
  * Session materialization: creates the typed context object that the rest
  * of handleChat (tool assembly, skill resolution, prompt building) depends on.
- *
- * NEW MODULE — extracted from server.ts handleChat.
- * Logic is identical to the original except the ChatContext interface
- * and buildChatContext function signature are new structural additions.
  */
 
 import { z } from 'zod';
@@ -49,11 +45,18 @@ export async function buildChatContext(body: ParsedBody, env: Env): Promise<Chat
   const daOrigin = env.DA_ORIGIN ?? 'https://admin.da.live';
   const sourceUrl = `${daOrigin}/source/${pageContext?.org}/${pageContext?.site}/${ensureHtmlExtension(pageContext?.path ?? '')}`;
 
-  // NEW: added explicit pageContext narrowing to fix pre-existing TS18048
-  const collab =
-    pageContext && isCollabEligibleView(pageContext.view) && imsToken && env.DACOLLAB
-      ? await createCollabClient(sourceUrl, imsToken, pageContext.org, env.DACOLLAB)
-      : null;
+  let collab: CollabClient | null = null;
+  if (pageContext && isCollabEligibleView(pageContext.view) && imsToken && env.DACOLLAB) {
+    try {
+      const collabPromise = createCollabClient(sourceUrl, imsToken, pageContext.org, env.DACOLLAB);
+      const timeout = new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 5000);
+      });
+      collab = await Promise.race([collabPromise, timeout]);
+    } catch {
+      // Collab connection failure is non-fatal — chat proceeds without live editing
+    }
+  }
 
   const adminClient =
     imsToken && env.DAADMIN

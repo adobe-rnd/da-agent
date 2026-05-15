@@ -1,12 +1,6 @@
 /**
- * Tool registry builder extracted from handleChat.
- * Creates DA/EDS/canvas tools, connects MCP servers (built-in + user),
- * loads generated tool stubs, and applies tool overrides.
- *
- * NEW MODULE — extracted from server.ts handleChat.
- * The AssembledTools interface and assembleTools signature are new.
- * The tool-overrides block (loadDisabledTools / applyToolOverrides) is
- * new functionality not present in main's server.ts.
+ * Tool registry builder: creates DA/EDS/canvas tools, connects MCP servers
+ * (built-in + user), loads generated tool stubs, and applies tool overrides.
  */
 
 import type { MCPServerConfig, BuiltInMCPServerConfig } from './mcp/types.js';
@@ -158,7 +152,6 @@ export async function assembleTools(
     ...generatedToolStubs,
   };
 
-  // NEW: tool-overrides governance — not present in main's server.ts
   if (adminClient && pageContext) {
     const disabled = await loadDisabledTools(adminClient, pageContext.org, pageContext.site);
     if (disabled.size > 0) {

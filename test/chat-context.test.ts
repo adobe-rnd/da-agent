@@ -133,4 +133,39 @@ describe('buildChatContext', () => {
     const ctx = await buildChatContext(minimalBody({ imsToken: 'tok' }), minimalEnv());
     expect(ctx.collab).toBeNull();
   });
+
+  it('collab is null when createCollabClient throws', async () => {
+    const { createCollabClient } = await import('../src/collab-client.js');
+    vi.mocked(createCollabClient).mockRejectedValueOnce(new Error('WebSocket failed'));
+    const ctx = await buildChatContext(
+      minimalBody({
+        imsToken: 'tok',
+        pageContext: { org: 'adobe', site: 'docs', path: '/p', view: 'edit' },
+      }),
+      minimalEnv(),
+    );
+    expect(ctx.collab).toBeNull();
+  });
+
+  it('collab is null when connection times out', async () => {
+    const { createCollabClient } = await import('../src/collab-client.js');
+    vi.mocked(createCollabClient).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ disconnect: vi.fn() } as never), 10000);
+        }),
+    );
+    vi.useFakeTimers();
+    const promise = buildChatContext(
+      minimalBody({
+        imsToken: 'tok',
+        pageContext: { org: 'adobe', site: 'docs', path: '/p', view: 'edit' },
+      }),
+      minimalEnv(),
+    );
+    await vi.advanceTimersByTimeAsync(5000);
+    const ctx = await promise;
+    expect(ctx.collab).toBeNull();
+    vi.useRealTimers();
+  });
 });

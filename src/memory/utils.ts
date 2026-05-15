@@ -1,4 +1,8 @@
-import type { ModelMessage } from 'ai';
+/** Minimal message shape for extraction — avoids coupling to any SDK. */
+interface ChatMessage {
+  role: string;
+  content: unknown;
+}
 
 // ---------------------------------------------------------------------------
 // Token estimation
@@ -19,7 +23,7 @@ export function estimateTokens(text: string): number {
 // Message extraction
 // ---------------------------------------------------------------------------
 
-export function extractLastUserMessageText(messages: ModelMessage[]): string {
+export function extractLastUserMessageText(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const msg = messages[i];
     if (msg?.role === 'user') {

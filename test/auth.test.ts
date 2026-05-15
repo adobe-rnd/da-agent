@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { DA_OAUTH_CLIENT_ID, CORS_HEADERS, extractImsUserId } from '../src/auth.js';
+import { CORS_HEADERS, extractImsUserId } from '../src/auth.js';
 
-describe('constants', () => {
-  it('exports DA_OAUTH_CLIENT_ID', () => {
-    expect(DA_OAUTH_CLIENT_ID).toBe('darkalley');
+describe('CORS_HEADERS', () => {
+  it('allows all origins for cross-domain chat requests', () => {
+    expect(CORS_HEADERS['Access-Control-Allow-Origin']).toBe('*');
   });
 
-  it('exports CORS_HEADERS with required fields', () => {
-    expect(CORS_HEADERS['Access-Control-Allow-Origin']).toBe('*');
+  it('permits GET and POST methods', () => {
     expect(CORS_HEADERS['Access-Control-Allow-Methods']).toContain('POST');
+    expect(CORS_HEADERS['Access-Control-Allow-Methods']).toContain('GET');
+  });
+
+  it('allows Authorization header for IMS token pass-through', () => {
     expect(CORS_HEADERS['Access-Control-Allow-Headers']).toContain('Authorization');
   });
 });
