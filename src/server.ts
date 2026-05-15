@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { DAAdminClient } from './da-admin/client.js';
 import { EDSAdminClient } from './eds-admin/client.js';
 import { createCanvasClientTools, createDATools, createEDSTools } from './tools/tools.js';
+import { getBuiltinToolCatalog } from './tools/catalog.js';
 import { ensureHtmlExtension, isCollabEligibleView } from './tools/utils.js';
 import { createCollabClient } from './collab-client.js';
 import { initTelemetry, flushTelemetry } from './telemetry.js';
@@ -190,6 +191,17 @@ export default {
 
     if (url.pathname === '/mcp-tools' && request.method === 'POST') {
       return handleMcpToolsList(request);
+    }
+
+    if (url.pathname === '/tools/builtin' && request.method === 'GET') {
+      return new Response(JSON.stringify(getBuiltinToolCatalog()), {
+        status: 200,
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=300',
+        },
+      });
     }
 
     return new Response('Not found', { status: 404 });
