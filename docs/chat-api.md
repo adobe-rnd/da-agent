@@ -59,7 +59,11 @@ Optional array of file attachments accompanying the latest user message.
 
 At least one of `dataBase64` or `contentUrl` must be present — the schema rejects attachments with neither.
 
-**File type handling:** All file types are currently upload-only — the agent receives file metadata and can call `content_upload` to store the file in DA, but does not read binary content. 
+**File type handling:** Behavior differs by type:
+
+- **Markdown** (`.md` / `text/markdown`) with `dataBase64` — content is decoded and inlined directly into the model context. The agent reads the file without needing to upload it first. It may still call `content_upload` to persist the file in DA, but only if the task requires it.
+- **All other types** with `dataBase64` — upload-only. The agent receives file metadata and can call `content_upload` to store the file in DA, but does not read binary content.
+- **Any type** with `contentUrl` — the file is already in DA storage. The agent uses the URL directly and must not call `content_upload` again.
 
 **Approval continuation pattern:** On the first POST, send `dataBase64`. If the agent pauses for approval after `content_upload` has run, re-send the attachment on the continuation POST with `contentUrl` (from the tool result) and omit `dataBase64`. If the approval pause happened before `content_upload` ran, re-send the original `dataBase64` unchanged.
 

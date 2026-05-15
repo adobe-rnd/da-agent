@@ -480,11 +480,16 @@ async function handleMcpToolsList(request: Request): Promise<Response> {
   });
 }
 
+function isMarkdown(item: { mediaType: string; fileName: string }): boolean {
+  return item.mediaType === 'text/markdown' || item.fileName.endsWith('.md');
+}
+
 function formatAttachmentsForModel(
   items: Array<{
     id: string;
     fileName: string;
     mediaType: string;
+    dataBase64?: string;
     sizeBytes?: number;
     contentUrl?: string;
   }>,
@@ -493,14 +498,30 @@ function formatAttachmentsForModel(
   const uploaded = items.filter((i) => i.contentUrl);
   const lines: string[] = [];
 
-  if (pending.length > 0) {
+  const readable = pending.filter((i) => isMarkdown(i) && i.dataBase64);
+  const uploadOnly = pending.filter((i) => !isMarkdown(i) || !i.dataBase64);
+
+  readable.forEach((item) => {
+    const content = globalThis.atob(item.dataBase64!);
+    lines.push(
+      `Attached markdown file: ${item.fileName}`,
+      '---',
+      content.trim(),
+      '---',
+      `To store this file in DA, call content_upload using attachmentRef [${item.id}].`,
+      '',
+    );
+  });
+
+  if (uploadOnly.length > 0) {
+    if (lines.length > 0) lines.push('');
     lines.push(
       'The user attached file(s). Binary contents are not available in chat context.',
-      'If you need one for upload, call content_upload using attachmentRef from this list.',
+      'To upload one, call content_upload using attachmentRef from this list.',
       '',
       'Attached files:',
     );
-    pending.forEach((item) => {
+    uploadOnly.forEach((item) => {
       const size = typeof item.sizeBytes === 'number' ? `, ${item.sizeBytes} bytes` : '';
       lines.push(`- [${item.id}] ${item.fileName} (${item.mediaType}${size})`);
     });
@@ -523,6 +544,7 @@ function expandLatestUserAttachmentsForModel(
   messages: any[],
   attachmentMeta: Array<{
     id: string;
+    dataBase64?: string;
     fileName: string;
     mediaType: string;
     sizeBytes?: number;
@@ -607,7 +629,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   const collab =
     isCollabEligibleView(pageContext?.view) && imsToken && env.DACOLLAB
-      ? await createCollabClient(sourceUrl, imsToken, pageContext.org, env.DACOLLAB)
+      ? await createCollabClient(sourceUrl, imsToken, pageContext?.org ?? '', env.DACOLLAB)
       : null;
 
   const adminClient =
@@ -826,14 +848,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     sessionPattern = detectSessionUserPattern(strippedForModel);
   }
   const withSelectionContext = expandUserSelectionContextForModel(strippedForModel);
-  const attachmentMeta = attachments.map((a) => ({
-    id: a.id,
-    fileName: a.fileName,
-    mediaType: a.mediaType,
-    ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
-    ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
-  }));
-  const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
+  const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachments);
 
   const cleanupMCP = () => {
     mcpClients.forEach((c) => {
