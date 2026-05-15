@@ -498,10 +498,17 @@ function formatAttachmentsForModel(
   const uploaded = items.filter((i) => i.contentUrl);
   const lines: string[] = [];
 
-  const readable = pending.filter((i) => isMarkdown(i) && i.dataBase64);
-  const uploadOnly = pending.filter((i) => !isMarkdown(i) || !i.dataBase64);
+  const MAX_INLINE_BYTES = 50_000;
+  const readable = pending.filter(
+    (i) =>
+      isMarkdown(i) && i.dataBase64 && (i.sizeBytes == null || i.sizeBytes <= MAX_INLINE_BYTES),
+  );
+  const uploadOnly = pending.filter(
+    (i) =>
+      !isMarkdown(i) || !i.dataBase64 || (i.sizeBytes != null && i.sizeBytes > MAX_INLINE_BYTES),
+  );
 
-  // TODO: skip inlining if sizeBytes exceeds a threshold (e.g. 50 KB) to avoid bloating the context window
+  // TODO: revisit MAX_INLINE_BYTES if large skill/template files need to be inlined
   readable.forEach((item) => {
     let content: string;
     try {
