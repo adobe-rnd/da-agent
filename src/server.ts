@@ -23,6 +23,11 @@ import {
 import { callSandbox } from './generated-tools/sandbox-client.js';
 import { fetchProjectMemory } from './memory/loader.js';
 import {
+  buildApprovalContinuationResponse,
+  getNewlyResolvedToolOutputs,
+  hasPendingApprovals,
+} from './tool-approval.js';
+import {
   detectSessionUserPattern,
   formatSessionPatternForPrompt,
   trailingAssistantAlreadySuggestedSkill,
@@ -275,6 +280,17 @@ async function resolveApprovals(messages: any[], daTools: Record<string, any>): 
           result[msgIdx].content = result[msgIdx].content.filter(
             (p: any) => !(p.type === 'tool-approval-request' && p.approvalId === resp.approvalId),
           );
+
+          const alreadyResolved = result.some(
+            (m) =>
+              m.role === 'tool' &&
+              Array.isArray(m.content) &&
+              m.content.some((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId),
+          );
+          if (alreadyResolved) {
+            // eslint-disable-next-line no-continue
+            continue;
+          }
 
           // Stale: processed in a prior request (has assistant/user msgs after it)
           if (i < lastConversationIdx) {
@@ -819,7 +835,26 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ...generatedToolStubs,
   };
 
+  const cleanupMCP = () => {
+    mcpClients.forEach((c) => {
+      try {
+        c.close();
+      } catch {
+        /* ignore */
+      }
+    });
+  };
+
   const processedMessages = await resolveApprovals(messages, allTools);
+
+  if (hasPendingApprovals(processedMessages)) {
+    const toolOutputs = getNewlyResolvedToolOutputs(messages, processedMessages);
+    cleanupMCP();
+    collab?.disconnect();
+    await flushTelemetry();
+    return buildApprovalContinuationResponse(toolOutputs, CORS_HEADERS);
+  }
+
   const strippedForModel = stripClientOnlyToolInputs(processedMessages);
   let sessionPattern: SessionUserPattern | null = null;
   if (!trailingAssistantAlreadySuggestedSkill(strippedForModel)) {
@@ -834,16 +869,6 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
   }));
   const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
-
-  const cleanupMCP = () => {
-    mcpClients.forEach((c) => {
-      try {
-        c.close();
-      } catch {
-        /* ignore */
-      }
-    });
-  };
 
   const result = streamText({
     model: bedrock('global.anthropic.claude-sonnet-4-6'),
