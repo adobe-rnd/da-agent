@@ -62,6 +62,8 @@ declare namespace Cloudflare {
     GENERATED_TOOLS_ENABLED?: string;
     /** URL of the da-generated-tools-sandbox Worker (Phase 1+) */
     GENERATED_TOOLS_SANDBOX_URL?: string;
+    /** URL of the governance-agent MCP server */
+    GOVERNANCE_AGENT_URL?: string;
   }
 }
 interface Env extends Cloudflare.Env {}
