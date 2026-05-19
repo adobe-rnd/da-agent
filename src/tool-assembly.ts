@@ -101,8 +101,8 @@ export async function assembleTools(
       const mcpResult = await connectAndRegisterMCPTools(mcpConfig);
       mcpTools = mcpResult.tools;
       mcpClients = mcpResult.clients;
-    } catch {
-      // MCP connection failures don't block chat
+    } catch (err) {
+      console.error('[da-agent] MCP connection failed:', err);
     }
   }
 

@@ -28,8 +28,8 @@ export async function resolveSkillsAndAgent(
   if (adminClient && pageContext) {
     try {
       skillsIndex = await loadSkillsIndex(adminClient, pageContext.org, pageContext.site);
-    } catch {
-      // Skills loading is best-effort
+    } catch (err) {
+      console.warn('[da-agent] failed to load skills index:', err);
     }
   }
 
@@ -56,8 +56,8 @@ export async function resolveSkillsAndAgent(
         );
         agentSkillContents = Object.fromEntries(entries.filter(Boolean) as [string, string][]);
       }
-    } catch {
-      // Agent loading is best-effort
+    } catch (err) {
+      console.warn('[da-agent] failed to load agent preset:', err);
     }
   }
 

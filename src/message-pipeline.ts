@@ -80,6 +80,17 @@ export async function resolveApprovals(
             (p: any) => !(p.type === 'tool-approval-request' && p.approvalId === resp.approvalId),
           );
 
+          const alreadyResolved = result.some(
+            (m) =>
+              m.role === 'tool' &&
+              Array.isArray(m.content) &&
+              m.content.some((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId),
+          );
+          if (alreadyResolved) {
+            // eslint-disable-next-line no-continue
+            continue;
+          }
+
           if (i < lastConversationIdx) {
             result[i] = {
               role: 'tool',

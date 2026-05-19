@@ -53,6 +53,9 @@ export async function buildChatContext(body: ParsedBody, env: Env): Promise<Chat
         setTimeout(() => resolve(null), 5000);
       });
       collab = await Promise.race([collabPromise, timeout]);
+      if (!collab) {
+        collabPromise.then((c) => c?.disconnect()).catch(() => {});
+      }
     } catch {
       // Collab connection failure is non-fatal — chat proceeds without live editing
     }

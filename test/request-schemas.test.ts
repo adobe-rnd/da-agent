@@ -54,7 +54,6 @@ describe('ChatRequestSchema', () => {
       requestedSkills: ['skill-a'],
       mcpServers: { myServer: 'https://mcp.example.com' },
       mcpServerHeaders: { myServer: { Authorization: 'Bearer xyz' } },
-      requestedGeneratedTools: ['gen-1'],
       attachments: [
         { id: 'a1', fileName: 'img.png', mediaType: 'image/png', dataBase64: 'abc123' },
       ],

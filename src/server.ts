@@ -3,6 +3,11 @@ import { streamText, stepCountIs, type ModelMessage } from 'ai';
 import { initTelemetry, flushTelemetry } from './telemetry.js';
 import { MCPClient } from './mcp/client.js';
 import {
+  buildApprovalContinuationResponse,
+  getNewlyResolvedToolOutputs,
+  hasPendingApprovals,
+} from './tool-approval.js';
+import {
   detectSessionUserPattern,
   trailingAssistantAlreadySuggestedSkill,
 } from './user-message-pattern.js';
@@ -165,7 +170,26 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   const { messages, requestedSkills, imsToken, attachments = [] } = parsed.data;
 
+  const cleanupMCP = () => {
+    mcpClients.forEach((c) => {
+      try {
+        c.close();
+      } catch {
+        /* ignore */
+      }
+    });
+  };
+
   const processedMessages = await resolveApprovals(messages, allTools);
+
+  if (hasPendingApprovals(processedMessages)) {
+    const toolOutputs = getNewlyResolvedToolOutputs(messages, processedMessages);
+    cleanupMCP();
+    ctx.collab?.disconnect();
+    await flushTelemetry();
+    return buildApprovalContinuationResponse(toolOutputs, CORS_HEADERS);
+  }
+
   const strippedForModel = stripClientOnlyToolInputs(processedMessages);
   const sessionPattern = trailingAssistantAlreadySuggestedSkill(strippedForModel)
     ? null
@@ -179,16 +203,6 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
   }));
   const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
-
-  const cleanupMCP = () => {
-    mcpClients.forEach((c) => {
-      try {
-        c.close();
-      } catch {
-        /* ignore */
-      }
-    });
-  };
 
   const bedrock = createAmazonBedrock({
     region: env.AWS_REGION,

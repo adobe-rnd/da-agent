@@ -41,8 +41,6 @@ export const ChatRequestSchema = z.object({
   mcpServers: z.record(z.string(), z.string()).optional(),
   /** Optional HTTP headers per server id (keys must match mcpServers). Sent on every MCP request to that URL. */
   mcpServerHeaders: z.record(z.string(), McpServerHeadersValueSchema).optional(),
-  /** Approved generated tool ids the client wants active for this request */
-  requestedGeneratedTools: z.array(z.string()).optional(),
   attachments: z
     .array(
       z
