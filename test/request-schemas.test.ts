@@ -33,9 +33,12 @@ describe('PageContextSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects missing path', () => {
+  it('defaults path to empty string when omitted', () => {
     const result = PageContextSchema.safeParse({ org: 'adobe', site: 'docs' });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.path).toBe('');
+    }
   });
 });
 
