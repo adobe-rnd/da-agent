@@ -152,12 +152,12 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   try {
     body = await request.json();
   } catch {
-    return new Response('Invalid JSON', { status: 400 });
+    return new Response('Invalid JSON', { status: 400, headers: CORS_HEADERS });
   }
 
   const parsed = ChatRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return new Response('Invalid request body', { status: 400 });
+    return new Response('Invalid request body', { status: 400, headers: CORS_HEADERS });
   }
 
   const ctx = await buildChatContext(parsed.data, env);
