@@ -27,6 +27,13 @@ import { buildSystemPrompt } from './prompt-builder.js';
 import { buildChatContext } from './chat-context.js';
 import { resolveSkillsAndAgent } from './skill-resolver.js';
 import { assembleTools } from './tool-assembly.js';
+import {
+  resolveCompactThreshold,
+  shouldAutoCompact,
+  buildAutoCompactSection,
+  createCompactTools,
+  COMPACT_SKILL,
+} from './compact.js';
 
 /** Loggable streamText / provider errors (Error#cause chains, non-enumerable fields). */
 function formatErrorForLog(err: unknown): string {
@@ -204,6 +211,50 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   }));
   const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
 
+  // Auto-compact: check token usage against threshold, inject skill + tool if triggered.
+  const compactThreshold = resolveCompactThreshold(env.COMPACT_THRESHOLD_OVERRIDE);
+  let effectiveSkillContents = agentSkillContents;
+
+  const baseSystemPrompt = buildSystemPrompt(
+    ctx.pageContext,
+    mcpConfig,
+    skillsIndex,
+    activeAgent,
+    agentSkillContents,
+    generatedToolsIndex,
+    ctx.projectMemory,
+    sessionPattern,
+    env.ENVIRONMENT,
+    builtInServers,
+    {
+      contents: requestedSkillContents,
+      missing: (requestedSkills ?? []).filter((id) => !requestedSkillContents[id]),
+    },
+  );
+
+  let systemPrompt = baseSystemPrompt;
+  if (shouldAutoCompact(modelMessages, baseSystemPrompt, compactThreshold)) {
+    effectiveSkillContents = { ...agentSkillContents, compact: COMPACT_SKILL };
+    Object.assign(allTools, createCompactTools());
+    systemPrompt =
+      buildSystemPrompt(
+        ctx.pageContext,
+        mcpConfig,
+        skillsIndex,
+        activeAgent,
+        effectiveSkillContents,
+        generatedToolsIndex,
+        ctx.projectMemory,
+        sessionPattern,
+        env.ENVIRONMENT,
+        builtInServers,
+        {
+          contents: requestedSkillContents,
+          missing: (requestedSkills ?? []).filter((id) => !requestedSkillContents[id]),
+        },
+      ) + buildAutoCompactSection(compactThreshold);
+  }
+
   const bedrock = createAmazonBedrock({
     region: env.AWS_REGION,
     apiKey: env.AWS_BEARER_TOKEN_BEDROCK,
@@ -221,22 +272,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       ctx.collab?.disconnect();
       cleanupMCP();
     },
-    system: buildSystemPrompt(
-      ctx.pageContext,
-      mcpConfig,
-      skillsIndex,
-      activeAgent,
-      agentSkillContents,
-      generatedToolsIndex,
-      ctx.projectMemory,
-      sessionPattern,
-      env.ENVIRONMENT,
-      builtInServers,
-      {
-        contents: requestedSkillContents,
-        missing: (requestedSkills ?? []).filter((id) => !requestedSkillContents[id]),
-      },
-    ),
+    system: systemPrompt,
     messages: modelMessages as ModelMessage[],
     tools: allTools,
     stopWhen: stepCountIs(5),
