@@ -1,3 +1,17 @@
+# [1.17.0](https://github.com/adobe-rnd/da-agent/compare/v1.16.0...v1.17.0) (2026-05-19)
+
+
+### Bug Fixes
+
+* address code review findings before merge ([aee3d39](https://github.com/adobe-rnd/da-agent/commit/aee3d394cb2e3fcfdc40fd5d2bf4a1e7695be0d9))
+* address PR review feedback and merge main ([9608975](https://github.com/adobe-rnd/da-agent/commit/9608975402edf6ce80f3f912ea4b66fdb0a47902))
+* move private-docs to docs, gitignore private-docs/ ([c1327a4](https://github.com/adobe-rnd/da-agent/commit/c1327a46131c628cfbe7890fe862b3768e2237a8))
+
+
+### Features
+
+* **tools:** wire tool-overrides into handleChat ([be6d7c3](https://github.com/adobe-rnd/da-agent/commit/be6d7c33bd99a9147ba3c5a969c7f31280850486))
+
 # [1.16.0](https://github.com/adobe-rnd/da-agent/compare/v1.15.0...v1.16.0) (2026-05-08)
 
 

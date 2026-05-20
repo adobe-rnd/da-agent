@@ -148,3 +148,5 @@ dist
 !.env.example
 
 docs/superpowers
+PR-throwaways/
+private-docs/
