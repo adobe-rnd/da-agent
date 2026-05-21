@@ -37,7 +37,7 @@ export const ChatRequestSchema = z.object({
   pageContext: PageContextSchema.optional(),
   imsToken: z.string().optional(),
   agentId: z.string().optional(),
-  sessionId: z.string().min(1).optional(),
+  sessionId: z.string().min(1).max(128).optional(),
   requestedSkills: z.array(z.string()).optional(),
   mcpServers: z.record(z.string(), z.string()).optional(),
   /** Optional HTTP headers per server id (keys must match mcpServers). Sent on every MCP request to that URL. */

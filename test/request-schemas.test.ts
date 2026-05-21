@@ -125,6 +125,14 @@ describe('ChatRequestSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('rejects sessionId longer than 128 characters', () => {
+    const result = ChatRequestSchema.safeParse({
+      messages: [{ role: 'user', content: 'hello' }],
+      sessionId: 'a'.repeat(129),
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('McpToolsRequestSchema', () => {
