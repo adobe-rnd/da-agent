@@ -96,6 +96,35 @@ describe('ChatRequestSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('accepts optional sessionId', () => {
+    const result = ChatRequestSchema.safeParse({
+      messages: [{ role: 'user', content: 'hello' }],
+      sessionId: 'session-abc-123',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sessionId).toBe('session-abc-123');
+    }
+  });
+
+  it('accepts request without sessionId', () => {
+    const result = ChatRequestSchema.safeParse({
+      messages: [{ role: 'user', content: 'hello' }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.sessionId).toBeUndefined();
+    }
+  });
+
+  it('rejects empty sessionId', () => {
+    const result = ChatRequestSchema.safeParse({
+      messages: [{ role: 'user', content: 'hello' }],
+      sessionId: '',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('McpToolsRequestSchema', () => {
