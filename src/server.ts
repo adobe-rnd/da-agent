@@ -168,7 +168,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const { allTools, mcpClients, mcpConfig, generatedToolsIndex, builtInServers } =
     await assembleTools(ctx, env, parsed.data);
 
-  const { messages, requestedSkills, imsToken, attachments = [] } = parsed.data;
+  const { messages, requestedSkills, imsToken, attachments = [], sessionId } = parsed.data;
 
   const cleanupMCP = () => {
     mcpClients.forEach((c) => {
@@ -248,6 +248,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
         org: ctx.pageContext?.org ?? 'unknown',
         site: ctx.pageContext?.site ?? 'unknown',
         path: ctx.pageContext?.path ?? 'unknown',
+        sessionId,
       },
     },
   });
