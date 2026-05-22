@@ -1,3 +1,12 @@
+# [1.18.0](https://github.com/adobe-rnd/da-agent/compare/v1.17.0...v1.18.0) (2026-05-22)
+
+
+### Features
+
+* add max(128) validation to sessionId ([6c0b370](https://github.com/adobe-rnd/da-agent/commit/6c0b370be239b039144ffc5bf97278b9d16128a2))
+* propagate sessionId from request to LangFuse as native session identifier ([fa9b296](https://github.com/adobe-rnd/da-agent/commit/fa9b2963bd690e798af3086e38cccd09f72b201e))
+* propagate sessionId to LangFuse as native session identifier [#33](https://github.com/adobe-rnd/da-agent/issues/33) ([a5a4492](https://github.com/adobe-rnd/da-agent/commit/a5a4492058bb8326495ed9e354d40dcb5b29f50f))
+
 # [1.17.0](https://github.com/adobe-rnd/da-agent/compare/v1.16.0...v1.17.0) (2026-05-19)
 
 
