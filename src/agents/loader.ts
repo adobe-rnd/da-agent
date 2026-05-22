@@ -1,5 +1,6 @@
 import type { DAAdminClient } from '../da-admin/client.js';
 import { getBuiltinPreset } from './builtin-presets.js';
+import { lintPreset } from './preset-linter.js';
 
 export interface AgentPreset {
   name: string;
@@ -30,7 +31,7 @@ function parsePreset(raw: string): AgentPreset | null {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed.name || typeof parsed.name !== 'string') return null;
-    return {
+    const preset: AgentPreset = {
       name: parsed.name,
       description: parsed.description ?? '',
       systemPrompt: parsed.systemPrompt ?? '',
@@ -38,6 +39,12 @@ function parsePreset(raw: string): AgentPreset | null {
       mcpServers: Array.isArray(parsed.mcpServers) ? parsed.mcpServers : [],
       icon: parsed.icon,
     };
+    const lint = lintPreset(preset);
+    if (!lint.pass) {
+      console.warn('[da-agent] preset blocked by linter:', lint.findings);
+      return null;
+    }
+    return preset;
   } catch {
     return null;
   }
@@ -147,6 +154,15 @@ export async function saveAgentPreset(
       error: 'Invalid agentId: must be lowercase alphanumeric with hyphens (max 63 chars)',
     };
   }
+  const lint = lintPreset(preset);
+  if (!lint.pass) {
+    const summary = lint.findings
+      .filter((f) => f.severity === 'error')
+      .map((f) => f.message)
+      .join('; ');
+    return { success: false, error: `Preset rejected: ${summary}` };
+  }
+
   const filename = `${agentId}.json`;
   try {
     const json = JSON.stringify(preset, null, 2);

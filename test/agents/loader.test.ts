@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  listAgentPresets,
-  loadAgentPreset,
-  saveAgentPreset,
-} from '../../src/agents/loader.js';
+import { listAgentPresets, loadAgentPreset, saveAgentPreset } from '../../src/agents/loader.js';
 import type { DAAdminClient } from '../../src/da-admin/client.js';
 import type { AgentPreset } from '../../src/agents/loader.js';
 
@@ -14,7 +10,7 @@ const VALID_PRESET: AgentPreset = {
   description: 'Optimizes content for search engines',
   systemPrompt: 'You are an SEO specialist.',
   skills: ['seo-checklist', 'meta-tags'],
-  mcpServers: ['analytics-api'],
+  mcpServers: ['https://analytics.adobeaem.workers.dev/sse'],
 };
 
 function mockClient(opts: {
@@ -109,7 +105,7 @@ describe('loadAgentPreset', () => {
     expect(preset).not.toBeNull();
     expect(preset!.name).toBe('SEO Agent');
     expect(preset!.skills).toEqual(['seo-checklist', 'meta-tags']);
-    expect(preset!.mcpServers).toEqual(['analytics-api']);
+    expect(preset!.mcpServers).toEqual(['https://analytics.adobeaem.workers.dev/sse']);
   });
 
   it('falls back to org-level', async () => {
@@ -175,7 +171,9 @@ describe('saveAgentPreset', () => {
 
   it('returns error on failure', async () => {
     const client = {
-      createSource: async () => { throw new Error('Forbidden'); },
+      createSource: async () => {
+        throw new Error('Forbidden');
+      },
     } as unknown as DAAdminClient;
 
     const result = await saveAgentPreset(client, 'org', 'mysite', 'fail', VALID_PRESET);
