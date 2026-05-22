@@ -7,6 +7,7 @@
 import { loadSkillsIndex, loadSkillContent } from './skills/loader.js';
 import type { SkillsIndex } from './skills/loader.js';
 import { loadAgentPreset } from './agents/loader.js';
+import { getBuiltinPreset } from './agents/builtin-presets.js';
 import type { AgentPreset } from './agents/loader.js';
 import type { ChatContext } from './chat-context.js';
 
@@ -35,29 +36,39 @@ export async function resolveSkillsAndAgent(
 
   let activeAgent: AgentPreset | null = null;
   let agentSkillContents: Record<string, string> = {};
-  if (adminClient && pageContext && agentId) {
-    try {
-      activeAgent = await loadAgentPreset(adminClient, pageContext.org, pageContext.site, agentId);
-      if (activeAgent && activeAgent.skills.length > 0) {
-        const entries = await Promise.all(
-          activeAgent.skills.map(async (sid) => {
-            try {
-              const content = await loadSkillContent(
-                adminClient,
-                pageContext.org,
-                pageContext.site,
-                sid,
-              );
-              return content ? ([sid, content] as const) : null;
-            } catch {
-              return null;
-            }
-          }),
+  if (agentId) {
+    if (adminClient && pageContext) {
+      try {
+        activeAgent = await loadAgentPreset(
+          adminClient,
+          pageContext.org,
+          pageContext.site,
+          agentId,
         );
-        agentSkillContents = Object.fromEntries(entries.filter(Boolean) as [string, string][]);
+        if (activeAgent && activeAgent.skills.length > 0) {
+          const entries = await Promise.all(
+            activeAgent.skills.map(async (sid) => {
+              try {
+                const content = await loadSkillContent(
+                  adminClient,
+                  pageContext.org,
+                  pageContext.site,
+                  sid,
+                );
+                return content ? ([sid, content] as const) : null;
+              } catch {
+                return null;
+              }
+            }),
+          );
+          agentSkillContents = Object.fromEntries(entries.filter(Boolean) as [string, string][]);
+        }
+      } catch (err) {
+        console.warn('[da-agent] failed to load agent preset:', err);
       }
-    } catch (err) {
-      console.warn('[da-agent] failed to load agent preset:', err);
+    }
+    if (!activeAgent) {
+      activeAgent = getBuiltinPreset(agentId);
     }
   }
 
