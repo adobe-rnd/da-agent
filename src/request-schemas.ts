@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const PageContextSchema = z.object({
   org: z.string(),
   site: z.string(),
-  path: z.string(),
+  path: z.string().optional().default(''),
   view: z.string().optional(),
 });
 
