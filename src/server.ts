@@ -232,27 +232,30 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     },
   );
 
+  const autoCompact = shouldAutoCompact(modelMessages, baseSystemPrompt, compactThreshold);
+  const userRequestedCompact = requestedSkills?.includes('compact');
+
   let systemPrompt = baseSystemPrompt;
-  if (shouldAutoCompact(modelMessages, baseSystemPrompt, compactThreshold)) {
-    effectiveSkillContents = { ...agentSkillContents, compact: COMPACT_SKILL };
+  if (autoCompact || userRequestedCompact) {
+    effectiveSkillContents = { ...agentSkillContents, _compact_: COMPACT_SKILL };
     Object.assign(allTools, createCompactTools());
-    systemPrompt =
-      buildSystemPrompt(
-        ctx.pageContext,
-        mcpConfig,
-        skillsIndex,
-        activeAgent,
-        effectiveSkillContents,
-        generatedToolsIndex,
-        ctx.projectMemory,
-        sessionPattern,
-        env.ENVIRONMENT,
-        builtInServers,
-        {
-          contents: requestedSkillContents,
-          missing: (requestedSkills ?? []).filter((id) => !requestedSkillContents[id]),
-        },
-      ) + buildAutoCompactSection(compactThreshold);
+    systemPrompt = buildSystemPrompt(
+      ctx.pageContext,
+      mcpConfig,
+      skillsIndex,
+      activeAgent,
+      effectiveSkillContents,
+      generatedToolsIndex,
+      ctx.projectMemory,
+      sessionPattern,
+      env.ENVIRONMENT,
+      builtInServers,
+      {
+        contents: requestedSkillContents,
+        missing: (requestedSkills ?? []).filter((id) => !requestedSkillContents[id]),
+      },
+    );
+    if (autoCompact) systemPrompt += buildAutoCompactSection(compactThreshold);
   }
 
   const bedrock = createAmazonBedrock({
