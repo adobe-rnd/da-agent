@@ -78,7 +78,7 @@ const INJECTION_PATTERNS: InjectionPattern[] = [
 ];
 
 const SAFE_MCP_URL =
-  /^https:\/\/(?:[\w-]+\.)*(?:aem\.live|adobeaem\.workers\.dev|adobe\.com|hlx\.live|da\.live)\//;
+  /^https:\/\/(?:[\w-]+\.)*(?:aem\.live|adobeaem\.workers\.dev|adobe\.com|da\.live)\//;
 
 const DATA_URI = /data:[^,]*;base64,/i;
 
@@ -87,8 +87,6 @@ const URL_PATTERN = /https?:\/\/[^\s"'<>]+/gi;
 const ALLOWED_URL_DOMAINS = [
   'aem.live',
   'aem.page',
-  'hlx.live',
-  'hlx.page',
   'adobe.com',
   'da.live',
   'adobeaem.workers.dev',
