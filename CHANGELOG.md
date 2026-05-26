@@ -1,3 +1,15 @@
+# [1.19.0](https://github.com/adobe-rnd/da-agent/compare/v1.18.0...v1.19.0) (2026-05-26)
+
+
+### Bug Fixes
+
+* **server:** add CORS headers to handleChat error responses ([65702fb](https://github.com/adobe-rnd/da-agent/commit/65702fba389c1961fb93a9d5bb54e1f027ca1501)), closes [#24](https://github.com/adobe-rnd/da-agent/issues/24)
+
+
+### Features
+
+* Restore the governance agent functionality ([#35](https://github.com/adobe-rnd/da-agent/issues/35)) ([4462c1a](https://github.com/adobe-rnd/da-agent/commit/4462c1adbf2b4f5bbd4787166024a5ee517880c1))
+
 # [1.18.0](https://github.com/adobe-rnd/da-agent/compare/v1.17.0...v1.18.0) (2026-05-22)
 
 
