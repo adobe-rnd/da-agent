@@ -236,17 +236,15 @@ function formatAttachmentsForModel(
     (i) =>
       isMarkdown(i) && i.dataBase64 && (i.sizeBytes == null || i.sizeBytes <= MAX_INLINE_BYTES),
   );
-  const uploadOnly = pending.filter(
-    (i) =>
-      !isMarkdown(i) || !i.dataBase64 || (i.sizeBytes != null && i.sizeBytes > MAX_INLINE_BYTES),
-  );
+  const uploadOnly = pending.filter((i) => !readable.includes(i));
 
   readable.forEach((item) => {
     let content: string;
     try {
       const bytes = Uint8Array.from(globalThis.atob(item.dataBase64!), (c) => c.charCodeAt(0));
       content = new TextDecoder().decode(bytes);
-    } catch {
+    } catch (e) {
+      console.warn(`[da-agent] Failed to decode base64 for ${item.fileName}:`, e);
       uploadOnly.push(item);
       return;
     }
