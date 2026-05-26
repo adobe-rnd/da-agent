@@ -10,7 +10,7 @@ const VALID_PRESET: AgentPreset = {
   description: 'Optimizes content for search engines',
   systemPrompt: 'You are an SEO specialist.',
   skills: ['seo-checklist', 'meta-tags'],
-  mcpServers: ['https://analytics.adobeaem.workers.dev/sse'],
+  mcpServers: ['https://analytics.da.live/sse'],
 };
 
 function mockClient(opts: {
@@ -105,7 +105,7 @@ describe('loadAgentPreset', () => {
     expect(preset).not.toBeNull();
     expect(preset!.name).toBe('SEO Agent');
     expect(preset!.skills).toEqual(['seo-checklist', 'meta-tags']);
-    expect(preset!.mcpServers).toEqual(['https://analytics.adobeaem.workers.dev/sse']);
+    expect(preset!.mcpServers).toEqual(['https://analytics.da.live/sse']);
   });
 
   it('falls back to org-level', async () => {

@@ -84,13 +84,7 @@ const DATA_URI = /data:[^,]*;base64,/i;
 
 const URL_PATTERN = /https?:\/\/[^\s"'<>]+/gi;
 
-const ALLOWED_URL_DOMAINS = [
-  'aem.live',
-  'aem.page',
-  'adobe.com',
-  'da.live',
-  'adobeaem.workers.dev',
-];
+const ALLOWED_URL_DOMAINS = ['aem.live', 'aem.page', 'adobe.com', 'da.live'];
 
 function domainAllowed(url: string): boolean {
   try {

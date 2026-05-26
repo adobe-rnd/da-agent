@@ -33,7 +33,7 @@ describe('preset-linter', () => {
     it('passes a preset with allowed MCP server URLs', () => {
       const result = lintPreset(
         makePreset({
-          mcpServers: ['https://da-tools.adobeaem.workers.dev/sse'],
+          mcpServers: ['https://da-tools.da.live/sse'],
         }),
       );
       expect(result.pass).toBe(true);
@@ -68,7 +68,7 @@ describe('preset-linter', () => {
     it('rejects mcpServers array exceeding 10 entries', () => {
       const result = lintPreset(
         makePreset({
-          mcpServers: Array(11).fill('https://x.adobeaem.workers.dev/sse'),
+          mcpServers: Array(11).fill('https://x.da.live/sse'),
         }),
       );
       expect(result.pass).toBe(false);
@@ -104,7 +104,7 @@ describe('preset-linter', () => {
           description: 'B'.repeat(500),
           systemPrompt: 'C'.repeat(4000),
           skills: Array(20).fill('s'),
-          mcpServers: Array(10).fill('https://x.adobeaem.workers.dev/sse'),
+          mcpServers: Array(10).fill('https://x.da.live/sse'),
         }),
       );
       expect(result.pass).toBe(true);
