@@ -1,4 +1,6 @@
 import type { DAAdminClient } from '../da-admin/client.js';
+import { getBuiltinPreset } from './builtin-presets.js';
+import { lintPreset } from './preset-linter.js';
 
 export interface AgentPreset {
   name: string;
@@ -23,12 +25,13 @@ interface ListItem {
 }
 
 const AGENTS_PATH = '.da/agents';
+const SAFE_AGENT_ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 function parsePreset(raw: string): AgentPreset | null {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed.name || typeof parsed.name !== 'string') return null;
-    return {
+    const preset: AgentPreset = {
       name: parsed.name,
       description: parsed.description ?? '',
       systemPrompt: parsed.systemPrompt ?? '',
@@ -36,6 +39,12 @@ function parsePreset(raw: string): AgentPreset | null {
       mcpServers: Array.isArray(parsed.mcpServers) ? parsed.mcpServers : [],
       icon: parsed.icon,
     };
+    const lint = lintPreset(preset);
+    if (!lint.pass) {
+      console.warn('[da-agent] preset blocked by linter:', lint.findings);
+      return null;
+    }
+    return preset;
   } catch {
     return null;
   }
@@ -107,7 +116,8 @@ export async function loadAgentPreset(
   site: string,
   agentId: string,
 ): Promise<AgentPreset | null> {
-  const filename = agentId.endsWith('.json') ? agentId : `${agentId}.json`;
+  if (!SAFE_AGENT_ID.test(agentId)) return getBuiltinPreset(agentId);
+  const filename = `${agentId}.json`;
 
   // Site-level
   try {
@@ -127,7 +137,8 @@ export async function loadAgentPreset(
     // not found
   }
 
-  return null;
+  // Built-in presets (shipped with da-agent)
+  return getBuiltinPreset(agentId);
 }
 
 export async function saveAgentPreset(
@@ -137,7 +148,22 @@ export async function saveAgentPreset(
   agentId: string,
   preset: AgentPreset,
 ): Promise<{ success: boolean; error?: string }> {
-  const filename = agentId.endsWith('.json') ? agentId : `${agentId}.json`;
+  if (!SAFE_AGENT_ID.test(agentId)) {
+    return {
+      success: false,
+      error: 'Invalid agentId: must be lowercase alphanumeric with hyphens (max 63 chars)',
+    };
+  }
+  const lint = lintPreset(preset);
+  if (!lint.pass) {
+    const summary = lint.findings
+      .filter((f) => f.severity === 'error')
+      .map((f) => f.message)
+      .join('; ');
+    return { success: false, error: `Preset rejected: ${summary}` };
+  }
+
+  const filename = `${agentId}.json`;
   try {
     const json = JSON.stringify(preset, null, 2);
     await client.createSource(org, site, `${AGENTS_PATH}/${filename}`, json, 'application/json');
