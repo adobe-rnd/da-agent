@@ -143,6 +143,80 @@ export async function resolveApprovals(
 /* eslint-enable no-await-in-loop */
 
 /**
+ * Ensure every assistant tool-call has a matching tool-result.
+ *
+ * Orphaned tool-calls appear when:
+ *  - The streamText step-limit fires mid-tool-execution, so the model emitted
+ *    a tool_use but the SDK never appended a tool_result before stopping.
+ *  - The client strips virtual (non-approval) tool results from history.
+ *
+ * Any unmatched tool-call gets a synthetic error result injected right after
+ * its assistant message so the Anthropic/Bedrock API never sees a tool_use
+ * without a corresponding tool_result.
+ *
+ * Counterpart: the client-side `stripOrphanedToolCallMessages` in da-nx
+ * drops orphan assistant messages entirely before POSTing; this server-side
+ * function injects results so the model sees an explicit failure.
+ */
+export function ensureOrphanedToolResults(messages: any[]): any[] {
+  const resolved = new Set<string>();
+  for (const msg of messages) {
+    if (msg.role === 'tool' && Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === 'tool-result' && part.toolCallId) {
+          resolved.add(part.toolCallId);
+        }
+      }
+    }
+  }
+
+  const orphans: Array<{ afterIdx: number; toolCallId: string; toolName: string }> = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    const msg = messages[i];
+    if (msg.role !== 'assistant' || !Array.isArray(msg.content)) {
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+    for (const part of msg.content) {
+      if (part.type === 'tool-call' && part.toolCallId && !resolved.has(part.toolCallId)) {
+        const toolName = part.toolName ?? '';
+        if (!toolName) {
+          console.warn(`[da-agent] orphaned tool-call ${part.toolCallId} has no toolName`);
+        }
+        orphans.push({ afterIdx: i, toolCallId: part.toolCallId, toolName });
+      }
+    }
+  }
+
+  if (orphans.length === 0) return messages;
+
+  const injections = new Map<number, any[]>();
+  for (const { afterIdx, toolCallId, toolName } of orphans) {
+    const list = injections.get(afterIdx) ?? [];
+    list.push({
+      type: 'tool-result',
+      toolCallId,
+      toolName,
+      output: {
+        type: 'error-text' as const,
+        value: 'Tool call was not executed (step limit reached or session interrupted).',
+      },
+    });
+    injections.set(afterIdx, list);
+  }
+
+  const out: any[] = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    out.push(messages[i]);
+    const parts = injections.get(i);
+    if (parts) {
+      out.push({ role: 'tool', content: parts });
+    }
+  }
+  return out;
+}
+
+/**
  * Remove client-only keys (e.g. revert snapshot) from tool-call inputs
  * before the model or tool execute sees them.
  */
