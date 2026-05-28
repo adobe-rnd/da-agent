@@ -1,14 +1,28 @@
+/**
+ * @legacy Config-sheet skill loader.
+ *
+ * This module is the OLD path — it reads skill metadata and bodies from the
+ * `skills` sheet in the site's DA config KV store.
+ *
+ * New code should use `./folder-loader.ts` instead, which reads from the
+ * `.da/skills/<id>/skill.md` folder layout.  This file is kept as the legacy
+ * fallback path and will be removed in PR-7 once telemetry confirms zero hits
+ * for ≥7 days after PR-5 is stable.
+ *
+ * See `private-docs/skills-storage-redesign-plan.md` for the full sequence.
+ */
 import type { DAAdminClient } from '../da-admin/client.js';
 
 export interface SkillSummary {
   id: string;
+  /** Display text shown in the agent's system prompt (title or description). */
   title: string;
 }
 
 export interface SkillsIndex {
   skills: SkillSummary[];
-  /** Skills always load from site config KV (`skills` sheet). */
-  source: 'site' | 'none';
+  /** Where the index was loaded from. */
+  source: 'site' | 'folder' | 'none';
 }
 
 const SKILLS_SHEET = 'skills';

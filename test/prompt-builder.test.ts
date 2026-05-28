@@ -147,6 +147,13 @@ describe('buildSystemPrompt with skills', () => {
     expect(prompt).toContain('Available Skills');
   });
 
+  it('references da_read_skill as the tool to use', () => {
+    const skillsIndex = { skills: [{ id: 'brand-voice', title: 'Enforce brand tone' }] };
+    const prompt = buildSystemPrompt(undefined, null, skillsIndex);
+    expect(prompt).toContain('da_read_skill');
+    expect(prompt).not.toContain('da_get_skill');
+  });
+
   it('omits skills section when empty', () => {
     const prompt = buildSystemPrompt(undefined, null, { skills: [] });
     expect(prompt).not.toContain('Available Skills');

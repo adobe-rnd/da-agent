@@ -2,11 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { resolveSkillsAndAgent } from '../src/skill-resolver.js';
 import type { ChatContext } from '../src/chat-context.js';
 
-vi.mock('../src/skills/loader.js', () => ({
-  loadSkillsIndex: vi.fn(async () => ({ skills: [{ id: 'seo', title: 'SEO' }] })),
-  loadSkillContent: vi.fn(async (_c: unknown, _o: string, _s: string, id: string) =>
+vi.mock('../src/skills/folder-loader.js', () => ({
+  loadSkillsIndexFromFolders: vi.fn(async () => ({
+    skills: [{ id: 'seo', title: 'Run SEO checks before publish' }],
+    source: 'folder',
+  })),
+  loadSkillBodyFromFolder: vi.fn(async (_c: unknown, _o: string, _s: string, id: string) =>
     id === 'seo' ? '# SEO Skill\nCheck headings.' : null,
   ),
+  LEGACY_SKILLS_SHEET_FALLBACK_ENABLED: true,
 }));
 
 vi.mock('../src/agents/loader.js', () => ({

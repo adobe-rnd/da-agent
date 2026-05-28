@@ -9,7 +9,8 @@ import { z } from 'zod';
 import type { DAAdminClient } from '../da-admin/client';
 import type { DAAPIError } from '../da-admin/types';
 import type { CollabClient } from '../collab-client';
-import { loadSkillContent, saveSkillContent } from '../skills/loader';
+import { saveSkillContent } from '../skills/loader';
+import { loadSkillBodyFromFolder } from '../skills/folder-loader';
 import { listAgentPresets, saveAgentPreset } from '../agents/loader';
 import type { AgentPreset } from '../agents/loader';
 import { ensureHtmlExtension, isCollabEligibleView } from './utils';
@@ -435,19 +436,21 @@ export function createDATools(
       },
     });
 
-    tools.da_get_skill = tool({
+    tools.da_read_skill = tool({
       description:
-        'Retrieve the full content of a skill by its ID. Skills are markdown documents ' +
-        'containing detailed instructions for specific tasks such as brand voice, SEO ' +
-        'checklists, or workflows that may reference MCP tools. Use this when the user ' +
-        'asks about or wants to apply a skill listed in the Available Skills section.',
+        'Read the full instructions of a skill by its ID. Skills are markdown documents ' +
+        'stored at `.da/skills/<id>/skill.md` and describe detailed workflows, brand ' +
+        'guidelines, SEO checklists, or other task instructions that may reference MCP ' +
+        'tools. Call this when the user asks about or wants to apply a skill listed in ' +
+        'the Available Skills section. Frontmatter is stripped; the response is ' +
+        'pure instruction prose.',
       inputSchema: z.object({
         skillId: z.string().describe('The skill identifier (e.g., "brand-voice", "seo-checklist")'),
       }),
       execute: async ({ skillId }) => {
         if (!ctxOrg) return { error: 'No organization context available' };
         try {
-          const content = await loadSkillContent(client, ctxOrg, ctxRepo, skillId);
+          const content = await loadSkillBodyFromFolder(client, ctxOrg, ctxRepo, skillId);
           if (!content) return { error: `Skill "${skillId}" not found` };
           return { skillId, content };
         } catch (e) {
