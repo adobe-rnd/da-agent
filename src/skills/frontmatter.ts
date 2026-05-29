@@ -18,8 +18,7 @@
  * ```
  */
 
-const FM_OPEN_RE = /^---[ \t]*$/;
-const FM_CLOSE_RE = /^---[ \t]*$/;
+const FM_DELIMITER_RE = /^---[ \t]*$/;
 
 /**
  * Inline YAML scalar unescaper — handles single-quoted and double-quoted
@@ -47,12 +46,12 @@ function unescapeScalar(raw: string): string {
  */
 export function parseFrontmatter(markdown: string): Record<string, string> | null {
   const lines = markdown.split('\n');
-  if (!FM_OPEN_RE.test(lines[0]?.trimEnd() ?? '')) return null;
+  if (!FM_DELIMITER_RE.test(lines[0].trimEnd())) return null;
 
   const fields: Record<string, string> = {};
   for (let i = 1; i < lines.length; i += 1) {
     const line = lines[i];
-    if (FM_CLOSE_RE.test(line.trimEnd())) return fields;
+    if (FM_DELIMITER_RE.test(line.trimEnd())) return fields;
     const colon = line.indexOf(':');
     if (colon >= 1) {
       const key = line.slice(0, colon).trim().toLowerCase();
@@ -70,10 +69,10 @@ export function parseFrontmatter(markdown: string): Record<string, string> | nul
  */
 export function stripFrontmatter(markdown: string): string {
   const lines = markdown.split('\n');
-  if (!FM_OPEN_RE.test(lines[0]?.trimEnd() ?? '')) return markdown;
+  if (!FM_DELIMITER_RE.test(lines[0].trimEnd())) return markdown;
 
   for (let i = 1; i < lines.length; i += 1) {
-    if (FM_CLOSE_RE.test(lines[i].trimEnd())) {
+    if (FM_DELIMITER_RE.test(lines[i].trimEnd())) {
       return lines
         .slice(i + 1)
         .join('\n')

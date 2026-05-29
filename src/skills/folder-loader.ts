@@ -75,7 +75,10 @@ function mapPool<T, R>(
         out[i] = result;
         return worker();
       })
-      .catch(() => worker());
+      .catch((err) => {
+        warn('mapPool worker failed', { err });
+        return worker();
+      });
   }
 
   const workers = Array.from({ length: Math.min(limit, items.length) }, worker);
@@ -137,14 +140,15 @@ export async function loadSkillsIndexFromFolders(
         if (indexed.status === 'draft') return null;
         const description = indexed.description || indexed.name || entry.name;
         return { id: entry.name, title: description } satisfies SkillSummary;
-      } catch {
+      } catch (err) {
+        warn('getSource failed for skill.md', { id: entry.name, path, err });
         return null;
       }
     });
 
     const skills = results.filter((s): s is SkillSummary => s !== null);
     if (skills.length > 0) {
-      return { skills, source: 'folder' as SkillsIndex['source'] };
+      return { skills, source: 'folder' };
     }
   }
 
