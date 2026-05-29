@@ -28,10 +28,18 @@ export const SKILL_BODY_FILENAME = 'skill.md';
 
 /**
  * Master switch for the legacy config-sheet fallback.
- * Set to `false` (via PR-7) once telemetry confirms zero legacy hits for
- * ≥7 days in alpha after PR-5 is stable.
+ * Set `legacyFallbackEnabled` to `false` (via PR-7) once telemetry confirms
+ * zero legacy hits for ≥7 days in alpha after PR-5 is stable.
+ *
+ * Stored as a mutable object property so Vitest tests can override the value
+ * without module-reload tricks. External code should read
+ * `LEGACY_SKILLS_SHEET_FALLBACK_ENABLED` (the named export below) for
+ * documentation purposes; internal logic reads `_fallbackConfig.enabled`.
  */
-export const LEGACY_SKILLS_SHEET_FALLBACK_ENABLED = true;
+export const _fallbackConfig = { enabled: true };
+
+/** Convenience re-export for documentation and PR-7 grep targets. */
+export const LEGACY_SKILLS_SHEET_FALLBACK_ENABLED = _fallbackConfig.enabled;
 
 /** Max simultaneous `skill.md` reads when building the manifest. */
 const LIST_READ_CONCURRENCY = 8;
@@ -114,6 +122,10 @@ export async function loadSkillsIndexFromFolders(
 ): Promise<SkillsIndex> {
   let folderEntries: DASource[] = [];
   let listFailed = false;
+  // 4xx means the folder doesn't exist yet (new site). still falls through to
+  // the sheet so existing sheet-only skills stay visible, but we don't count
+  // this as a legacy-fallback hit in telemetry — it's a normal new-site state.
+  let isFolderNotFound = false;
 
   try {
     const items = await client.listSources(org, site, SKILLS_FOLDER_BASE);
@@ -121,8 +133,7 @@ export async function loadSkillsIndexFromFolders(
   } catch (err) {
     const status = (err as { status?: number }).status ?? 0;
     if (status >= 400 && status < 500) {
-      // 4xx → folder not found or no access: treat as "no skills yet"
-      folderEntries = [];
+      isFolderNotFound = true;
     } else {
       listFailed = true;
       warn('listSources failed for skills folder', { org, site, err });
@@ -147,14 +158,19 @@ export async function loadSkillsIndexFromFolders(
     });
 
     const skills = results.filter((s): s is SkillSummary => s !== null);
-    if (skills.length > 0) {
-      return { skills, source: 'folder' };
-    }
+    // Folder was found: return its results regardless of count. An empty result
+    // means all skills are draft or unreadable — that's intentional. Don't fall
+    // through to the sheet, which could resurrect stale skill content.
+    return { skills, source: 'folder' };
   }
 
-  // Fall back to config sheet when folder walk returns nothing or failed
-  if (LEGACY_SKILLS_SHEET_FALLBACK_ENABLED) {
-    recordLegacyFallback(org, site, 'loadSkillsIndex');
+  // Folder doesn't exist yet or list failed: fall back to config sheet.
+  if (_fallbackConfig.enabled) {
+    if (!isFolderNotFound) {
+      // Only count as a legacy hit when the folder exists but has no entries
+      // (or errored). A missing folder is a normal new-site state, not a hit.
+      recordLegacyFallback(org, site, 'loadSkillsIndex');
+    }
     return loadSkillsIndex(client, org, site);
   }
 
@@ -198,7 +214,7 @@ export async function loadSkillBodyFromFolder(
     }
   }
 
-  if (LEGACY_SKILLS_SHEET_FALLBACK_ENABLED) {
+  if (_fallbackConfig.enabled) {
     recordLegacyFallback(org, site, `loadSkillBody:${id}`);
     return loadSkillContent(client, org, site, id);
   }

@@ -464,7 +464,10 @@ export function createDATools(
         'Create or update a skill in the DA site config `skills` sheet (key + markdown content). Call this whenever ' +
         'the user asks to create, save, write, or persist a skill — it is the primary deterministic ' +
         'path (structured skillId + content). Skills can reference MCP tools by name ' +
-        '(e.g., mcp__<serverId>__<toolName>). Do not rely on chat-only prose to save skills.',
+        '(e.g., mcp__<serverId>__<toolName>). Do not rely on chat-only prose to save skills. ' +
+        'Note: this tool writes to the config sheet. Skills stored here are readable via ' +
+        '`da_read_skill` through the legacy fallback until the site is migrated to the folder ' +
+        'layout (`.da/skills/<id>/skill.md`). After migration, use the Skills Editor to manage skills.',
       inputSchema: z.object({
         skillId: z
           .string()

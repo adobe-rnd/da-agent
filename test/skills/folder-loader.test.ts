@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   loadSkillsIndexFromFolders,
   loadSkillBodyFromFolder,
   LEGACY_SKILLS_SHEET_FALLBACK_ENABLED,
+  _fallbackConfig,
 } from '../../src/skills/folder-loader.js';
 import type { DAAdminClient } from '../../src/da-admin/client.js';
 
@@ -142,14 +143,25 @@ describe('loadSkillsIndexFromFolders', () => {
     expect(index.skills.some((s) => s.id === 'legacy-skill')).toBe(true);
   });
 
-  it('falls back to config sheet on 4xx list error', async () => {
-    const client = mockClient({
+  it('falls back to config sheet on 4xx (folder not found) without counting as legacy hit', async () => {
+    // 4xx is a normal new-site state. sheet fallback still runs so existing
+    // sheet skills stay visible, but getSiteConfig must be called exactly once.
+    let configCalls = 0;
+    const base = mockClient({
       listError: { status: 404 },
       configSkills: [{ key: 'sheet-skill', content: '# Sheet\n\nContent.' }],
     });
+    const client = {
+      ...base,
+      getSiteConfig: async (...args: Parameters<typeof base.getSiteConfig>) => {
+        configCalls += 1;
+        return base.getSiteConfig(...args);
+      },
+    } as typeof base;
 
     const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
     expect(index.source).toBe('site');
+    expect(configCalls).toBe(1);
   });
 
   it('falls back to config sheet on 5xx list error', async () => {
@@ -183,6 +195,118 @@ describe('loadSkillsIndexFromFolders', () => {
 
     const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
     expect(index.source).toBe('folder');
+  });
+
+  it('returns source=folder with empty skills when all folder skills are draft', async () => {
+    // All skills are draft: the folder was found, so we must NOT fall back to
+    // the sheet. Draft status is intentional; using sheet data would resurrect
+    // stale content.
+    const client = mockClient({
+      listResponse: [
+        { name: 'wip-one', path: '/.da/skills/wip-one' },
+        { name: 'wip-two', path: '/.da/skills/wip-two' },
+      ],
+      sourceByPath: {
+        '.da/skills/wip-one/skill.md': SKILL_MD('wip-one', 'Draft one', 1, 'draft'),
+        '.da/skills/wip-two/skill.md': SKILL_MD('wip-two', 'Draft two', 1, 'draft'),
+      },
+      configSkills: [{ key: 'old-skill', content: '# Old\n\nStale content.' }],
+    });
+
+    const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
+    expect(index.source).toBe('folder');
+    expect(index.skills).toHaveLength(0);
+    // sheet skill must NOT appear — folder took precedence
+    expect(index.skills.some((s) => s.id === 'old-skill')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LEGACY_SKILLS_SHEET_FALLBACK_ENABLED = false
+// ---------------------------------------------------------------------------
+
+describe('loadSkillsIndexFromFolders (legacy fallback disabled)', () => {
+  afterEach(() => {
+    _fallbackConfig.enabled = true;
+  });
+
+  it('returns empty index when folder walk is empty and fallback is disabled', async () => {
+    _fallbackConfig.enabled = false;
+
+    const client = mockClient({
+      listResponse: [],
+      configSkills: [{ key: 'sheet-skill', content: '# Sheet\n\nContent.' }],
+    });
+
+    const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
+    expect(index.skills).toHaveLength(0);
+    expect(index.source).toBe('none');
+  });
+
+  it('never calls getSiteConfig when fallback is disabled', async () => {
+    _fallbackConfig.enabled = false;
+
+    let configCalls = 0;
+    const base = mockClient({ listResponse: [] });
+    const client = {
+      ...base,
+      getSiteConfig: async () => {
+        configCalls += 1;
+        return {};
+      },
+    } as typeof base;
+
+    await loadSkillsIndexFromFolders(client, 'org', 'mysite');
+    expect(configCalls).toBe(0);
+  });
+
+  it('still returns folder skills when they exist, regardless of flag', async () => {
+    _fallbackConfig.enabled = false;
+
+    const client = mockClient({
+      listResponse: [{ name: 'live-skill', path: '/.da/skills/live-skill' }],
+      sourceByPath: {
+        '.da/skills/live-skill/skill.md': SKILL_MD('live-skill', 'Live desc', 1),
+      },
+    });
+
+    const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
+    expect(index.source).toBe('folder');
+    expect(index.skills).toHaveLength(1);
+  });
+});
+
+describe('loadSkillBodyFromFolder (legacy fallback disabled)', () => {
+  afterEach(() => {
+    _fallbackConfig.enabled = true;
+  });
+
+  it('returns null when skill.md not found and fallback is disabled', async () => {
+    _fallbackConfig.enabled = false;
+
+    const client = mockClient({
+      configSkills: [{ key: 'sheet-skill', content: '# Sheet\n\nContent.' }],
+    });
+
+    const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'sheet-skill');
+    expect(body).toBeNull();
+  });
+
+  it('never calls getSiteConfig when fallback is disabled', async () => {
+    _fallbackConfig.enabled = false;
+
+    let configCalls = 0;
+    const base = mockClient({});
+    const client = {
+      ...base,
+      getSiteConfig: async () => {
+        configCalls += 1;
+        return {};
+      },
+    } as typeof base;
+
+    await loadSkillBodyFromFolder(client, 'org', 'mysite', 'any-skill');
+    expect(configCalls).toBe(0);
   });
 });
 
