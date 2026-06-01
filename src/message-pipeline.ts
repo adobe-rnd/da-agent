@@ -212,11 +212,18 @@ export function expandUserSelectionContextForModel(messages: any[]): any[] {
   });
 }
 
+function isMarkdown(item: { mediaType: string; fileName: string }): boolean {
+  return item.mediaType === 'text/markdown' || item.fileName.toLowerCase().endsWith('.md');
+}
+
+const MAX_INLINE_BYTES = 50_000;
+
 function formatAttachmentsForModel(
   items: Array<{
     id: string;
     fileName: string;
     mediaType: string;
+    dataBase64?: string;
     sizeBytes?: number;
     contentUrl?: string;
   }>,
@@ -225,14 +232,41 @@ function formatAttachmentsForModel(
   const uploaded = items.filter((i) => i.contentUrl);
   const lines: string[] = [];
 
-  if (pending.length > 0) {
+  const readable = pending.filter(
+    (i) =>
+      isMarkdown(i) && i.dataBase64 && (i.sizeBytes == null || i.sizeBytes <= MAX_INLINE_BYTES),
+  );
+  const uploadOnly = pending.filter((i) => !readable.includes(i));
+
+  readable.forEach((item) => {
+    let content: string;
+    try {
+      const bytes = Uint8Array.from(globalThis.atob(item.dataBase64!), (c) => c.charCodeAt(0));
+      content = new TextDecoder().decode(bytes);
+    } catch (e) {
+      console.warn(`[da-agent] Failed to decode base64 for ${item.fileName}:`, e);
+      uploadOnly.push(item);
+      return;
+    }
+    lines.push(
+      `Attached markdown file: ${item.fileName}`,
+      '---',
+      content.trim(),
+      '---',
+      `To store this file in DA, call content_upload using attachmentRef [${item.id}].`,
+      '',
+    );
+  });
+
+  if (uploadOnly.length > 0) {
+    if (lines.length > 0) lines.push('');
     lines.push(
       'The user attached file(s). Binary contents are not available in chat context.',
       'If you need one for upload, call content_upload using attachmentRef from this list.',
       '',
       'Attached files:',
     );
-    pending.forEach((item) => {
+    uploadOnly.forEach((item) => {
       const size = typeof item.sizeBytes === 'number' ? `, ${item.sizeBytes} bytes` : '';
       lines.push(`- [${item.id}] ${item.fileName} (${item.mediaType}${size})`);
     });
@@ -257,6 +291,7 @@ export function expandLatestUserAttachmentsForModel(
     id: string;
     fileName: string;
     mediaType: string;
+    dataBase64?: string;
     sizeBytes?: number;
     contentUrl?: string;
   }>,
