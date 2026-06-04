@@ -44,10 +44,10 @@ function buildSkillsPromptSection(skillsIndex?: SkillsIndex | null): string {
   if (!skillsIndex || skillsIndex.skills.length === 0) return '';
   const lines = skillsIndex.skills.map((s) => `- **${s.id}**: ${s.title}`).join('\n');
   return `\n\n## Available Skills
-The following skills are stored in the DA config \`skills\` sheet for this site. Use the da_get_skill tool to read a skill's full instructions before applying it.
+The following skills are available for this site. Use the \`da_read_skill\` tool to load a skill's full instructions before applying it.
 ${lines}
 
-Skills may reference MCP tools by name. When applying a skill, read its full content first, then follow its instructions.`;
+Skills may reference MCP tools by name. When applying a skill, read its full content first using \`da_read_skill\`, then follow its instructions precisely.`;
 }
 
 function buildAgentPromptSection(

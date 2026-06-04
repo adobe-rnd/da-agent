@@ -4,7 +4,7 @@
  * and explicitly requested skill contents.
  */
 
-import { loadSkillsIndex, loadSkillContent } from './skills/loader.js';
+import { loadSkillsIndexFromFolders, loadSkillBodyFromFolder } from './skills/folder-loader.js';
 import type { SkillsIndex } from './skills/loader.js';
 import { loadAgentPreset } from './agents/loader.js';
 import { getBuiltinPreset } from './agents/builtin-presets.js';
@@ -28,7 +28,11 @@ export async function resolveSkillsAndAgent(
   let skillsIndex: SkillsIndex | null = null;
   if (adminClient && pageContext) {
     try {
-      skillsIndex = await loadSkillsIndex(adminClient, pageContext.org, pageContext.site);
+      skillsIndex = await loadSkillsIndexFromFolders(
+        adminClient,
+        pageContext.org,
+        pageContext.site,
+      );
     } catch (err) {
       console.warn('[da-agent] failed to load skills index:', err);
     }
@@ -49,7 +53,7 @@ export async function resolveSkillsAndAgent(
           const entries = await Promise.all(
             activeAgent.skills.map(async (sid) => {
               try {
-                const content = await loadSkillContent(
+                const content = await loadSkillBodyFromFolder(
                   adminClient,
                   pageContext.org,
                   pageContext.site,
@@ -79,7 +83,7 @@ export async function resolveSkillsAndAgent(
         requestedSkills.map(async (sid) => {
           if (agentSkillContents[sid]) return [sid, agentSkillContents[sid]] as const;
           try {
-            const content = await loadSkillContent(
+            const content = await loadSkillBodyFromFolder(
               adminClient,
               pageContext.org,
               pageContext.site,
