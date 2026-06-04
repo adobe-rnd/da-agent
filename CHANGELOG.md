@@ -1,3 +1,10 @@
+## [1.22.1](https://github.com/adobe-rnd/da-agent/compare/v1.22.0...v1.22.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **mcp:** prune unreachable servers from system prompt and improve diagnostics ([d85d3cb](https://github.com/adobe-rnd/da-agent/commit/d85d3cb97d7193c751c21ddfb830a53a0c23787b))
+
 # [1.22.0](https://github.com/adobe-rnd/da-agent/compare/v1.21.0...v1.22.0) (2026-06-04)
 
 
