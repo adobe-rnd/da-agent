@@ -123,15 +123,21 @@ function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient
  *
  * Connections that fail are silently skipped (best-effort).
  */
+export interface MCPConnectionError {
+  serverId: string;
+  error: string;
+}
+
 export async function connectAndRegisterMCPTools(
   mcpConfig: {
     mcpServers: Record<string, MCPServerConfig>;
     toolAllowPatterns: string[];
   },
   options?: { headers?: Record<string, string>; timeout?: number },
-): Promise<{ tools: Record<string, Tool>; clients: MCPClient[] }> {
+): Promise<{ tools: Record<string, Tool>; clients: MCPClient[]; errors: MCPConnectionError[] }> {
   const tools: Record<string, Tool> = {};
   const clients: MCPClient[] = [];
+  const errors: MCPConnectionError[] = [];
 
   const entries = Object.entries(mcpConfig.mcpServers);
 
@@ -158,21 +164,34 @@ export async function connectAndRegisterMCPTools(
 
       try {
         await client.initialize();
-        const mcpTools = await client.listTools();
+        const discoveredTools = await client.listTools();
         clients.push(client);
 
-        for (const mcpTool of mcpTools) {
+        let registeredCount = 0;
+        for (const toolDef of discoveredTools) {
           try {
-            const { name, tool: aiTool } = mcpToolToAITool(serverId, mcpTool, client);
-            tools[name] = aiTool;
-          } catch {
-            /* skip tools with unusable schemas */
+            const { name: qualifiedName, tool: aiTool } = mcpToolToAITool(
+              serverId,
+              toolDef,
+              client,
+            );
+            tools[qualifiedName] = aiTool;
+            registeredCount += 1;
+          } catch (schemaError) {
+            console.log(
+              `MCP server ${serverId}: skipped tool ${toolDef.name} (schema error: ${schemaError})`,
+            );
           }
         }
 
-        console.log(`MCP server ${serverId}: connected, ${mcpTools.length} tool(s) registered`);
-      } catch (e) {
-        console.log(`MCP server ${serverId}: connection failed: ${e}`);
+        console.log(
+          `MCP server ${serverId}: ${discoveredTools.length} tool(s) listed, ${registeredCount} registered`,
+        );
+      } catch (connectionError) {
+        const message =
+          connectionError instanceof Error ? connectionError.message : String(connectionError);
+        console.log(`MCP server ${serverId}: connection failed: ${message}`);
+        errors.push({ serverId, error: message });
         try {
           await client.close();
         } catch {
@@ -182,5 +201,5 @@ export async function connectAndRegisterMCPTools(
     }),
   );
 
-  return { tools, clients };
+  return { tools, clients, errors };
 }

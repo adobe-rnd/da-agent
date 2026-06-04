@@ -172,7 +172,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const { skillsIndex, activeAgent, agentSkillContents, requestedSkillContents } =
     await resolveSkillsAndAgent(ctx, parsed.data);
 
-  const { allTools, mcpClients, mcpConfig, generatedToolsIndex, builtInServers } =
+  const { allTools, mcpClients, mcpConfig, mcpErrors, generatedToolsIndex, builtInServers } =
     await assembleTools(ctx, env, parsed.data);
 
   const { messages, requestedSkills, imsToken, attachments = [], sessionId } = parsed.data;
@@ -230,6 +230,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       contents: requestedSkillContents,
       missing: (requestedSkills ?? []).filter((id) => !requestedSkillContents[id]),
     },
+    mcpErrors,
   );
 
   const autoCompact = shouldAutoCompact(modelMessages, baseSystemPrompt, compactThreshold);
@@ -254,6 +255,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
         contents: requestedSkillContents,
         missing: (requestedSkills ?? []).filter((id) => !requestedSkillContents[id]),
       },
+      mcpErrors,
     );
     if (autoCompact) systemPrompt += buildAutoCompactSection(compactThreshold);
   }
