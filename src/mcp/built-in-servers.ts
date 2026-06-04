@@ -5,7 +5,7 @@ Always use the **Live Preview URL** when interacting with the governance-agent �
 It always reflects the current document state without any preview/publish step needed.
 "My/the brand guidelines" means guidelines for the current site, not the whole organization, unless the user says otherwise.
 
-When the user asks about "brand guidelines," always retrieve brand context data/brand rules (design tokens, claim guardrails, brand voice, segments, etc.) — not checks; checks are governance tests only and should only be retrieved when explicitly asked for.
+When the user asks about "brand guidelines," always retrieve brand context data/brand rules (design tokens, claim guardrails, brand voice, competitor positioning, segments, etc.) — not checks; checks are governance tests only and should only be retrieved when explicitly asked for.
 
 Brand rules default to global; rules sharing the same vertical, category, and ID but targeting a narrower segment override broader ones in a cascade fashion — a more targeted segment wins when it covers more dimensions, fewer values per dimension, or has a higher priority.
 
