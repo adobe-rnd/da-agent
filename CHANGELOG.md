@@ -1,3 +1,10 @@
+## [1.22.2](https://github.com/adobe-rnd/da-agent/compare/v1.22.1...v1.22.2) (2026-06-04)
+
+
+### Bug Fixes
+
+* **mcp:** add timeout coverage for body streaming and surface errors to UI ([a3576fa](https://github.com/adobe-rnd/da-agent/commit/a3576fa4a171d97ce148f67a4a25d4faf98da3cb))
+
 ## [1.22.1](https://github.com/adobe-rnd/da-agent/compare/v1.22.0...v1.22.1) (2026-06-04)
 
 
