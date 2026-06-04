@@ -23,8 +23,6 @@ export const SKILL_BODY_FILENAME = 'skill.md';
 
 /**
  * Master switch for the legacy config-sheet fallback.
- * Set `legacyFallbackEnabled` to `false` (via PR-7) once telemetry confirms
- * zero legacy hits for ≥7 days in alpha after PR-5 is stable.
  *
  * Stored as a mutable object property so Vitest tests can override the value
  * without module-reload tricks. External code should read
