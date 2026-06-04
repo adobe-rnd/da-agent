@@ -5,7 +5,7 @@
 
 import type { MCPServerConfig, BuiltInMCPServerConfig } from './mcp/types.js';
 import { createCanvasClientTools, createDATools, createEDSTools } from './tools/tools.js';
-import { connectAndRegisterMCPTools } from './mcp/tool-adapter.js';
+import { connectAndRegisterMCPTools, type MCPConnectionError } from './mcp/tool-adapter.js';
 import { MCPClient } from './mcp/client.js';
 import {
   loadApprovedGeneratedTools,
@@ -25,6 +25,7 @@ export interface AssembledTools {
   /* eslint-enable @typescript-eslint/no-explicit-any */
   mcpClients: MCPClient[];
   mcpConfig: { mcpServers: Record<string, MCPServerConfig>; toolAllowPatterns: string[] } | null;
+  mcpErrors: MCPConnectionError[];
   generatedToolsIndex: GeneratedToolsIndex;
   builtInServers: Record<string, BuiltInMCPServerConfig>;
 }
@@ -96,11 +97,13 @@ export async function assembleTools(
   // Connect to live MCP servers and register their tools
   let mcpTools: Record<string, unknown> = {};
   let mcpClients: MCPClient[] = [];
+  let mcpErrors: MCPConnectionError[] = [];
   if (mcpConfig && Object.keys(mcpConfig.mcpServers).length > 0) {
     try {
       const mcpResult = await connectAndRegisterMCPTools(mcpConfig);
       mcpTools = mcpResult.tools;
       mcpClients = mcpResult.clients;
+      mcpErrors = mcpResult.errors;
     } catch (err) {
       console.error('[da-agent] MCP connection failed:', err);
     }
@@ -175,5 +178,5 @@ export async function assembleTools(
     }
   }
 
-  return { allTools, mcpClients, mcpConfig, generatedToolsIndex, builtInServers };
+  return { allTools, mcpClients, mcpConfig, mcpErrors, generatedToolsIndex, builtInServers };
 }

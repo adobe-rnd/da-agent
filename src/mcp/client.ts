@@ -96,28 +96,31 @@ export class MCPClient {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       // Extract session ID from response
       const sid = response.headers.get('Mcp-Session-Id');
       if (sid) this.sessionId = sid;
 
       // Notification: expect 202
       if (!request.id) {
+        clearTimeout(timeoutId);
         return null;
       }
 
       if (!response.ok) {
+        clearTimeout(timeoutId);
         throw new Error(`MCP server returned ${response.status}: ${response.statusText}`);
       }
 
       const contentType = response.headers.get('content-type') ?? '';
 
+      let result: JsonRpcResponse;
       if (contentType.includes('text/event-stream')) {
-        return this.parseSSEResponse(response);
+        result = await this.parseSSEResponse(response);
+      } else {
+        result = (await response.json()) as JsonRpcResponse;
       }
-
-      return (await response.json()) as JsonRpcResponse;
+      clearTimeout(timeoutId);
+      return result;
     } catch (e) {
       clearTimeout(timeoutId);
       if (e instanceof Error && e.name === 'AbortError') {

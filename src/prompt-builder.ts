@@ -1,4 +1,5 @@
 import type { MCPServerConfig, BuiltInMCPServerConfig } from './mcp/types.js';
+import type { MCPConnectionError } from './mcp/tool-adapter.js';
 import type { SkillsIndex } from './skills/loader.js';
 import type { AgentPreset } from './agents/loader.js';
 import type { GeneratedToolsIndex } from './generated-tools/loader.js';
@@ -10,18 +11,31 @@ import type { PageContext } from './request-schemas.js';
 function buildMCPPromptSection(
   mcpConfig?: { mcpServers: Record<string, MCPServerConfig>; toolAllowPatterns: string[] } | null,
   builtInServers?: Record<string, BuiltInMCPServerConfig>,
+  mcpErrors?: MCPConnectionError[],
 ): string {
-  if (!mcpConfig || Object.keys(mcpConfig.mcpServers).length === 0) return '';
-  const serverLines = Object.keys(mcpConfig.mcpServers)
-    .map((id) => `- **${id}**: tools available as \`mcp__${id}__<toolName>\``)
-    .join('\n');
-  let section = `\n\n## Available MCP Servers\nThe following MCP servers have been discovered from the connected repository:\n${serverLines}\n\nTools from these servers follow the naming pattern \`mcp__<serverId>__<toolName>\`.`;
-  const instructionEntries = Object.entries(builtInServers ?? {}).filter(([, s]) => s.instructions);
-  if (instructionEntries.length > 0) {
-    const instructionLines = instructionEntries
-      .map(([id, s]) => `### ${id}\n${s.instructions}`)
-      .join('\n\n');
-    section += `\n\n### MCP Server Instructions\n${instructionLines}`;
+  const hasServers = mcpConfig && Object.keys(mcpConfig.mcpServers).length > 0;
+  const hasErrors = mcpErrors && mcpErrors.length > 0;
+  if (!hasServers && !hasErrors) return '';
+
+  let section = '';
+  if (hasServers) {
+    const serverLines = Object.keys(mcpConfig.mcpServers)
+      .map((id) => `- **${id}**: tools available as \`mcp__${id}__<toolName>\``)
+      .join('\n');
+    section += `\n\n## Available MCP Servers\nThe following MCP servers have been discovered from the connected repository:\n${serverLines}\n\nTools from these servers follow the naming pattern \`mcp__<serverId>__<toolName>\`.`;
+    const instructionEntries = Object.entries(builtInServers ?? {}).filter(
+      ([, s]) => s.instructions,
+    );
+    if (instructionEntries.length > 0) {
+      const instructionLines = instructionEntries
+        .map(([id, s]) => `### ${id}\n${s.instructions}`)
+        .join('\n\n');
+      section += `\n\n### MCP Server Instructions\n${instructionLines}`;
+    }
+  }
+  if (hasErrors) {
+    const errorLines = mcpErrors.map((e) => `- **${e.serverId}**: ${e.error}`).join('\n');
+    section += `\n\n## Unreachable MCP Servers\nThe following MCP servers were configured but could not be reached. Inform the user if they ask about these servers.\n${errorLines}`;
   }
   return section;
 }
@@ -95,8 +109,9 @@ export function buildSystemPrompt(
   environment?: string,
   builtInServers?: Record<string, BuiltInMCPServerConfig>,
   requestedSkills?: { contents: Record<string, string>; missing: string[] },
+  mcpErrors?: MCPConnectionError[],
 ): string {
-  const mcpSection = buildMCPPromptSection(mcpConfig, builtInServers);
+  const mcpSection = buildMCPPromptSection(mcpConfig, builtInServers, mcpErrors);
   const skillsSection = buildSkillsPromptSection(skillsIndex);
   const agentSection = buildAgentPromptSection(activeAgent, agentSkillContents);
   const requestedSkillsSection = buildRequestedSkillsSection(
