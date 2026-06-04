@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/adobe-rnd/da-agent/compare/v1.21.0...v1.22.0) (2026-06-04)
+
+
+### Features
+
+* Deeper integration of Experience Context into the Enterprise Flywheel ([c3a3f38](https://github.com/adobe-rnd/da-agent/commit/c3a3f38ca13ea5dbfdf32c9262f4160bfb991412))
+
 # [1.21.0](https://github.com/adobe-rnd/da-agent/compare/v1.20.0...v1.21.0) (2026-06-04)
 
 
