@@ -9,10 +9,13 @@ vi.mock('../src/tools/tools.js', () => ({
 }));
 
 vi.mock('../src/mcp/tool-adapter.js', () => ({
-  connectAndRegisterMCPTools: vi.fn(async () => ({
-    tools: { mcp__gov__check: { description: 'check' } },
-    clients: [{ close: vi.fn() }],
-  })),
+  connectAndRegisterMCPTools: vi.fn(async (mcpConfig) => {
+    const tools: Record<string, { description: string }> = {};
+    for (const id of Object.keys(mcpConfig.mcpServers)) {
+      tools[`mcp__${id}__check`] = { description: 'check' };
+    }
+    return { tools, clients: [{ close: vi.fn() }] };
+  }),
 }));
 
 vi.mock('../src/mcp/built-in-servers.js', () => ({
@@ -80,7 +83,7 @@ describe('assembleTools', () => {
 
   it('includes MCP tools from built-in servers', async () => {
     const { allTools, mcpClients } = await assembleTools(mockCtx(), minimalEnv(), {});
-    expect(allTools).toHaveProperty('mcp__gov__check');
+    expect(allTools).toHaveProperty('mcp__governance-agent__check');
     expect(mcpClients).toHaveLength(1);
   });
 
