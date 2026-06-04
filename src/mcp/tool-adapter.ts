@@ -158,21 +158,32 @@ export async function connectAndRegisterMCPTools(
 
       try {
         await client.initialize();
-        const mcpTools = await client.listTools();
+        console.log(`MCP server ${serverId}: initialized (session=${client.currentSessionId})`);
+        const discoveredTools = await client.listTools();
         clients.push(client);
 
-        for (const mcpTool of mcpTools) {
+        let registeredCount = 0;
+        for (const toolDef of discoveredTools) {
           try {
-            const { name, tool: aiTool } = mcpToolToAITool(serverId, mcpTool, client);
-            tools[name] = aiTool;
-          } catch {
-            /* skip tools with unusable schemas */
+            const { name: qualifiedName, tool: aiTool } = mcpToolToAITool(
+              serverId,
+              toolDef,
+              client,
+            );
+            tools[qualifiedName] = aiTool;
+            registeredCount += 1;
+          } catch (schemaError) {
+            console.log(
+              `MCP server ${serverId}: skipped tool ${toolDef.name} (schema error: ${schemaError})`,
+            );
           }
         }
 
-        console.log(`MCP server ${serverId}: connected, ${mcpTools.length} tool(s) registered`);
-      } catch (e) {
-        console.log(`MCP server ${serverId}: connection failed: ${e}`);
+        console.log(
+          `MCP server ${serverId}: ${discoveredTools.length} tool(s) listed, ${registeredCount} registered`,
+        );
+      } catch (connectionError) {
+        console.log(`MCP server ${serverId}: connection failed: ${connectionError}`);
         try {
           await client.close();
         } catch {
