@@ -1,3 +1,16 @@
+# [1.23.0](https://github.com/adobe-rnd/da-agent/compare/v1.22.2...v1.23.0) (2026-06-04)
+
+
+### Bug Fixes
+
+* **skills:** address AITA batch-1 issues in frontmatter + folder-loader ([346e3ca](https://github.com/adobe-rnd/da-agent/commit/346e3ca00b51449a1652f195388b1ae8c1c317fb))
+* **skills:** address AITA batch-2+3 issues in folder-loader and tools ([8953df4](https://github.com/adobe-rnd/da-agent/commit/8953df4ab7a8aeb5396ad4914f966101315a5679))
+
+
+### Features
+
+* **skills:** read from folder layout + da_read_skill tool + legacy fallback ([1dc0a17](https://github.com/adobe-rnd/da-agent/commit/1dc0a17920ac5ae8d44b29f843c8b2a714c36acb))
+
 ## [1.22.2](https://github.com/adobe-rnd/da-agent/compare/v1.22.1...v1.22.2) (2026-06-04)
 
 
