@@ -6,11 +6,6 @@
  *   - `LEGACY_SKILLS_SHEET_FALLBACK_ENABLED` is `true`, AND
  *   - the folder index is empty / the folder path is not found.
  *
- * Every legacy-path hit logs a structured warning.  When the counter has
- * been at zero for ≥7 days in alpha, PR-7 removes this fallback entirely.
- *
- * See `private-docs/skills-storage-redesign-plan.md § C + D` for the full
- * design rationale.
  */
 
 import type { DAAdminClient } from '../da-admin/client.js';
