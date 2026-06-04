@@ -201,8 +201,14 @@ export class MCPClient {
     if (!this.initialized) throw new Error('MCPClient not initialized');
 
     const response = await this.send(this.buildRequest('tools/list'));
-    const result = this.unwrapResult<{ tools: MCPToolDefinition[] }>(response);
-    return result.tools ?? [];
+    const listResult = this.unwrapResult<{ tools: MCPToolDefinition[] }>(response);
+    if (!listResult || !Array.isArray(listResult.tools)) {
+      console.log(
+        `MCPClient listTools: unexpected result shape: ${JSON.stringify(listResult)?.slice(0, 200)}`,
+      );
+      return [];
+    }
+    return listResult.tools;
   }
 
   /**

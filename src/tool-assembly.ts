@@ -109,6 +109,19 @@ export async function assembleTools(
     }
   }
 
+  // Prune mcpConfig to only advertise servers that actually registered tools.
+  // Without this the system prompt tells the model about servers whose tools
+  // are unavailable, causing it to hallucinate non-existent tool names.
+  if (mcpConfig) {
+    const serversWithTools = new Set(
+      Object.keys(mcpTools).map((toolName) => toolName.split('__')[1]),
+    );
+    mcpConfig.mcpServers = Object.fromEntries(
+      Object.entries(mcpConfig.mcpServers).filter(([serverId]) => serversWithTools.has(serverId)),
+    );
+    mcpConfig.toolAllowPatterns = [...serversWithTools].map((serverId) => `mcp__${serverId}__*`);
+  }
+
   // Load approved generated tool defs and register stubs (execution delegates to sandbox).
   let generatedToolsIndex: GeneratedToolsIndex = { tools: [], source: 'none' };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

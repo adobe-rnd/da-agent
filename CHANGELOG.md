@@ -1,3 +1,41 @@
+## [1.22.1](https://github.com/adobe-rnd/da-agent/compare/v1.22.0...v1.22.1) (2026-06-04)
+
+
+### Bug Fixes
+
+* **mcp:** prune unreachable servers from system prompt and improve diagnostics ([d85d3cb](https://github.com/adobe-rnd/da-agent/commit/d85d3cb97d7193c751c21ddfb830a53a0c23787b))
+
+# [1.22.0](https://github.com/adobe-rnd/da-agent/compare/v1.21.0...v1.22.0) (2026-06-04)
+
+
+### Features
+
+* Deeper integration of Experience Context into the Enterprise Flywheel ([c3a3f38](https://github.com/adobe-rnd/da-agent/commit/c3a3f38ca13ea5dbfdf32c9262f4160bfb991412))
+
+# [1.21.0](https://github.com/adobe-rnd/da-agent/compare/v1.20.0...v1.21.0) (2026-06-04)
+
+
+### Features
+
+* Deeper integration of Experience Context into the Enterprise Flywheel ([#39](https://github.com/adobe-rnd/da-agent/issues/39)) ([8c9f377](https://github.com/adobe-rnd/da-agent/commit/8c9f377a9d70ea69091ff0f6d71faba6c5844819))
+
+# [1.20.0](https://github.com/adobe-rnd/da-agent/compare/v1.19.0...v1.20.0) (2026-06-01)
+
+
+### Bug Fixes
+
+* **linter:** remove adobeaem.workers.dev from allowed domains ([5c1a829](https://github.com/adobe-rnd/da-agent/commit/5c1a82923c9b1ffbed8b002d154d076d0e014b89))
+* register compact tool for user-requested path, use _compact_ key ([a19015e](https://github.com/adobe-rnd/da-agent/commit/a19015edfe124370309c41b2ad719ca5a44568ce))
+* remove deprecated hlx.live and hlx.page from allowed domains ([cca8b65](https://github.com/adobe-rnd/da-agent/commit/cca8b65d930c5311aad83795a29437aa87f94c33))
+
+
+### Features
+
+* **agents:** add built-in presets with skills-engineer persona ([20c805b](https://github.com/adobe-rnd/da-agent/commit/20c805bf49a76ed2bf56738c8edfd5e41ebd4d2d))
+* **agents:** add preset linter to block prompt injection and structural violations ([bb524d4](https://github.com/adobe-rnd/da-agent/commit/bb524d48a93216b90503d71c4247c2102ac02c37))
+* **compact:** auto-compact context window when history exceeds threshold ([59f7ccb](https://github.com/adobe-rnd/da-agent/commit/59f7ccbf507aea56cf6cf2201edff2236be21792))
+* support reading markdown ([#29](https://github.com/adobe-rnd/da-agent/issues/29)) ([34794ab](https://github.com/adobe-rnd/da-agent/commit/34794abeb17bf6c2024082fe7b91ac6ab8df6b96))
+
 # [1.19.0](https://github.com/adobe-rnd/da-agent/compare/v1.18.0...v1.19.0) (2026-05-26)
 
 

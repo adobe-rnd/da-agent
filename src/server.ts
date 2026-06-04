@@ -206,6 +206,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     id: a.id,
     fileName: a.fileName,
     mediaType: a.mediaType,
+    ...(a.dataBase64 ? { dataBase64: a.dataBase64 } : {}),
     ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
     ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
   }));
