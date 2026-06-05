@@ -1,3 +1,10 @@
+## [1.24.2](https://github.com/adobe-rnd/da-agent/compare/v1.24.1...v1.24.2) (2026-06-05)
+
+
+### Bug Fixes
+
+* **mcp:** inject IMS token in /mcp-tools validation endpoint ([7959a66](https://github.com/adobe-rnd/da-agent/commit/7959a668c44d0ce68157394b4356bf4c7f722e3d))
+
 ## [1.24.1](https://github.com/adobe-rnd/da-agent/compare/v1.24.0...v1.24.1) (2026-06-05)
 
 
