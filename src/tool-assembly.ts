@@ -14,7 +14,8 @@ import { normalizeMcpHeadersInput } from './request-schemas.js';
 import { DA_OAUTH_CLIENT_ID } from './auth.js';
 import { getBuiltInMcpServers } from './mcp/built-in-servers.js';
 import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
-import type { ChatContext } from './chat-context.js';
+import type { EarlyChatContext } from './chat-context.js';
+import type { CollabClient } from './collab-client.js';
 
 export interface AssembledTools {
   /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -27,19 +28,38 @@ export interface AssembledTools {
   builtInServers: Record<string, BuiltInMCPServerConfig>;
 }
 
+/**
+ * Mutable holder for collab — lets DA tools be created before the collab
+ * WebSocket resolves. Tools read .client at execution time (during the
+ * LLM stream), not at registration time.
+ */
+export interface CollabRef {
+  client: CollabClient | null;
+}
+
+/**
+ * Assemble all tools for a /chat request. Accepts EarlyChatContext (no
+ * collab/memory) so it can run in parallel with collab resolution.
+ *
+ * Collab is provided via a mutable ref so DA tools pick it up at
+ * execution time after the caller fills it in.
+ */
 export async function assembleTools(
-  ctx: ChatContext,
+  ctx: EarlyChatContext,
   env: Env,
   body: {
     mcpServers?: Record<string, string>;
     mcpServerHeaders?: Record<string, unknown>;
   },
+  collabRef: CollabRef = { client: null },
 ): Promise<AssembledTools> {
-  const { adminClient, edsClient, collab, pageContext, imsToken, attachmentMap } = ctx;
+  const { adminClient, edsClient, pageContext, imsToken, attachmentMap } = ctx;
 
   const daTools = createDATools(adminClient, {
     pageContext: pageContext ?? undefined,
-    collab: collab ?? undefined,
+    get collab() {
+      return collabRef.client;
+    },
     org: pageContext?.org,
     repo: pageContext?.site,
     resolveAttachmentByRef: (attachmentRef: string) => {

@@ -9,7 +9,7 @@ import type { SkillsIndex } from './skills/loader.js';
 import { loadAgentPreset } from './agents/loader.js';
 import { getBuiltinPreset } from './agents/builtin-presets.js';
 import type { AgentPreset } from './agents/loader.js';
-import type { ChatContext } from './chat-context.js';
+import type { EarlyChatContext } from './chat-context.js';
 
 export interface ResolvedSkills {
   skillsIndex: SkillsIndex | null;
@@ -18,8 +18,12 @@ export interface ResolvedSkills {
   requestedSkillContents: Record<string, string>;
 }
 
+/**
+ * Resolve skill index, agent preset, and skill contents.
+ * Only needs adminClient + pageContext so it can run before collab resolves.
+ */
 export async function resolveSkillsAndAgent(
-  ctx: ChatContext,
+  ctx: Pick<EarlyChatContext, 'adminClient' | 'pageContext'>,
   body: { agentId?: string; requestedSkills?: string[] },
 ): Promise<ResolvedSkills> {
   const { adminClient, pageContext } = ctx;

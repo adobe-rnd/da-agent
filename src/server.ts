@@ -24,9 +24,9 @@ import {
   expandLatestUserAttachmentsForModel,
 } from './message-pipeline.js';
 import { buildSystemPrompt } from './prompt-builder.js';
-import { buildChatContext } from './chat-context.js';
+import { buildEarlyChatContext, resolveAsyncContext } from './chat-context.js';
 import { resolveSkillsAndAgent } from './skill-resolver.js';
-import { assembleTools } from './tool-assembly.js';
+import { assembleTools, type CollabRef } from './tool-assembly.js';
 import {
   resolveCompactThreshold,
   shouldAutoCompact,
@@ -167,13 +167,24 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response('Invalid request body', { status: 400, headers: CORS_HEADERS });
   }
 
-  const ctx = await buildChatContext(parsed.data, env);
+  // Phase 1 (sync): build adminClient, pageContext, attachments — no I/O.
+  // Phase 2 (parallel): collab+memory, skills, MCP+tools all run concurrently.
+  // DA tools capture collabRef, which is filled in once collab resolves.
+  const early = buildEarlyChatContext(parsed.data, env);
+  const collabRef: CollabRef = { client: null };
 
-  const { skillsIndex, activeAgent, agentSkillContents, requestedSkillContents } =
-    await resolveSkillsAndAgent(ctx, parsed.data);
+  const [ctx, { skillsIndex, activeAgent, agentSkillContents, requestedSkillContents }, assembled] =
+    await Promise.all([
+      resolveAsyncContext(early, env).then((fullCtx) => {
+        collabRef.client = fullCtx.collab;
+        return fullCtx;
+      }),
+      resolveSkillsAndAgent(early, parsed.data),
+      assembleTools(early, env, parsed.data, collabRef),
+    ]);
 
   const { allTools, mcpClients, mcpConfig, mcpErrors, generatedToolsIndex, builtInServers } =
-    await assembleTools(ctx, env, parsed.data);
+    assembled;
 
   const { messages, requestedSkills, imsToken, attachments = [], sessionId } = parsed.data;
 
