@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/adobe-rnd/da-agent/compare/v1.23.0...v1.24.0) (2026-06-05)
+
+
+### Features
+
+* **mcp:** auto-inject IMS token for MCP servers on trusted domains ([a0ab8ca](https://github.com/adobe-rnd/da-agent/commit/a0ab8ca5c25fabfc06b6a5bc03144c5129febe13))
+
 # [1.23.0](https://github.com/adobe-rnd/da-agent/compare/v1.22.2...v1.23.0) (2026-06-04)
 
 
