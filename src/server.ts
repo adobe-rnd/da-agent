@@ -16,7 +16,8 @@ import {
   McpToolsRequestSchema,
   normalizeMcpHeadersInput,
 } from './request-schemas.js';
-import { CORS_HEADERS, extractImsUserId } from './auth.js';
+import { CORS_HEADERS, DA_OAUTH_CLIENT_ID, extractImsUserId } from './auth.js';
+import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
 import {
   resolveApprovals,
   stripClientOnlyToolInputs,
@@ -76,7 +77,7 @@ export default {
     }
 
     if (url.pathname === '/mcp-tools' && request.method === 'POST') {
-      return handleMcpToolsList(request);
+      return handleMcpToolsList(request, env);
     }
 
     return new Response('Not found', { status: 404 });
@@ -88,7 +89,7 @@ export default {
  * Accepts POST { servers: { id: url, ... }, serverHeaders?: { id: [...] | { ... } } }.
  * Returns { servers: [{ id, tools: [{ name, description }], error? }] }.
  */
-async function handleMcpToolsList(request: Request): Promise<Response> {
+async function handleMcpToolsList(request: Request, env: Env): Promise<Response> {
   let body: unknown;
   try {
     body = await request.json();
@@ -107,6 +108,9 @@ async function handleMcpToolsList(request: Request): Promise<Response> {
     );
   }
 
+  const { imsToken } = parsed.data;
+  const trustedDomains = parseTrustedDomains(env.TRUSTED_MCP_DOMAINS);
+
   const serverTools: Array<{
     id: string;
     tools: Array<{ name: string; description: string }>;
@@ -118,10 +122,18 @@ async function handleMcpToolsList(request: Request): Promise<Response> {
 
   await Promise.all(
     entries.map(async ([serverId, serverUrl]) => {
-      const headers = normalizeMcpHeadersInput(parsed.data.serverHeaders?.[serverId]);
+      const mergedHeaders: Record<string, string> = {
+        ...(normalizeMcpHeadersInput(parsed.data.serverHeaders?.[serverId]) ?? {}),
+      };
+
+      if (imsToken && isUrlTrustedForToken(serverUrl, trustedDomains)) {
+        mergedHeaders.Authorization = `Bearer ${imsToken}`;
+        mergedHeaders['x-api-key'] = DA_OAUTH_CLIENT_ID;
+      }
+
       const client = new MCPClient(serverUrl, {
         timeout: 10000,
-        ...(headers ? { headers } : {}),
+        ...(Object.keys(mergedHeaders).length > 0 ? { headers: mergedHeaders } : {}),
       });
       try {
         await client.initialize();
