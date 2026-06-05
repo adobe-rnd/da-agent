@@ -336,11 +336,24 @@ export class DAAdminClient {
   }
 
   /**
+   * Per-request cache for getSiteConfig. Multiple callers (skills loader,
+   * tool-overrides, legacy fallback) need the same config within a single
+   * /chat request — this avoids redundant round-trips to da-admin.
+   * Safe because DAAdminClient instances are created per-request.
+   */
+  private siteConfigCache = new Map<string, Promise<Record<string, unknown>>>();
+
+  /**
    * Read site multi-sheet config (KV) — same JSON as DA `/config/{org}/{site}/`.
+   * Results are memoized for the lifetime of this client instance (one /chat request).
    */
   async getSiteConfig(org: string, site: string): Promise<Record<string, unknown>> {
-    const endpoint = `/config/${org}/${site}/`;
-    return this.request<Record<string, unknown>>(endpoint);
+    const key = `${org}/${site}`;
+    if (!this.siteConfigCache.has(key)) {
+      const endpoint = `/config/${org}/${site}/`;
+      this.siteConfigCache.set(key, this.request<Record<string, unknown>>(endpoint));
+    }
+    return this.siteConfigCache.get(key)!;
   }
 
   /**
