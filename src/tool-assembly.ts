@@ -17,6 +17,7 @@ import { loadDisabledTools, applyToolOverrides } from './tools/tool-overrides.js
 import { normalizeMcpHeadersInput } from './request-schemas.js';
 import { DA_OAUTH_CLIENT_ID } from './auth.js';
 import { getBuiltInMcpServers } from './mcp/built-in-servers.js';
+import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
 import type { ChatContext } from './chat-context.js';
 
 export interface AssembledTools {
@@ -60,14 +61,22 @@ export async function assembleTools(
 
   // Build MCP config: user-provided servers merged with always-on built-in servers.
   const allMcpServers: Record<string, MCPServerConfig> = {};
+  const trustedDomains = parseTrustedDomains(env.TRUSTED_MCP_DOMAINS);
 
   for (const [id, url] of Object.entries(body.mcpServers ?? {})) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const headers = normalizeMcpHeadersInput((body.mcpServerHeaders as any)?.[id]);
+    const mergedHeaders: Record<string, string> = { ...(headers ?? {}) };
+
+    if (imsToken && isUrlTrustedForToken(url, trustedDomains)) {
+      mergedHeaders.Authorization = `Bearer ${imsToken}`;
+      mergedHeaders['x-api-key'] = DA_OAUTH_CLIENT_ID;
+    }
+
     allMcpServers[id] = {
       type: 'http',
       url,
-      ...(headers ? { headers } : {}),
+      ...(Object.keys(mergedHeaders).length > 0 ? { headers: mergedHeaders } : {}),
     };
   }
 

@@ -66,6 +66,8 @@ declare namespace Cloudflare {
     GENERATED_TOOLS_SANDBOX_URL?: string;
     /** URL of the governance-agent MCP server */
     GOVERNANCE_AGENT_URL?: string;
+    /** Comma-separated domain patterns trusted to receive IMS tokens (e.g. "*.adobe.io,*.corp.ethos*.adobe.net") */
+    TRUSTED_MCP_DOMAINS?: string;
   }
 }
 interface Env extends Cloudflare.Env {}
