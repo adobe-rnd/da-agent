@@ -30,8 +30,10 @@ vi.mock('../src/mcp/built-in-servers.js', () => ({
 }));
 
 vi.mock('../src/generated-tools/loader.js', () => ({
-  loadGeneratedToolsIndex: vi.fn(async () => ({ tools: [], source: 'none' })),
-  loadApprovedGeneratedTools: vi.fn(async () => []),
+  loadGeneratedTools: vi.fn(async () => ({
+    index: { tools: [], source: 'none' },
+    approved: [],
+  })),
 }));
 
 vi.mock('../src/generated-tools/sandbox-client.js', () => ({

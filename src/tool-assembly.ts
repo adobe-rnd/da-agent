@@ -7,11 +7,7 @@ import type { MCPServerConfig, BuiltInMCPServerConfig } from './mcp/types.js';
 import { createCanvasClientTools, createDATools, createEDSTools } from './tools/tools.js';
 import { connectAndRegisterMCPTools, type MCPConnectionError } from './mcp/tool-adapter.js';
 import { MCPClient } from './mcp/client.js';
-import {
-  loadApprovedGeneratedTools,
-  loadGeneratedToolsIndex,
-  type GeneratedToolsIndex,
-} from './generated-tools/loader.js';
+import { loadGeneratedTools, type GeneratedToolsIndex } from './generated-tools/loader.js';
 import { callSandbox } from './generated-tools/sandbox-client.js';
 import { loadDisabledTools, applyToolOverrides } from './tools/tool-overrides.js';
 import { normalizeMcpHeadersInput } from './request-schemas.js';
@@ -131,24 +127,20 @@ export async function assembleTools(
     mcpConfig.toolAllowPatterns = [...serversWithTools].map((serverId) => `mcp__${serverId}__*`);
   }
 
-  // Load approved generated tool defs and register stubs (execution delegates to sandbox).
+  // Load generated tool defs in a single pass and register approved stubs.
   let generatedToolsIndex: GeneratedToolsIndex = { tools: [], source: 'none' };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const generatedToolStubs: Record<string, any> = {};
   if (adminClient && pageContext && env.GENERATED_TOOLS_ENABLED === 'true') {
     try {
-      generatedToolsIndex = await loadGeneratedToolsIndex(
+      const { index, approved } = await loadGeneratedTools(
         adminClient,
         pageContext.org,
         pageContext.site,
       );
-      const activeDefs = await loadApprovedGeneratedTools(
-        adminClient,
-        pageContext.org,
-        pageContext.site,
-      );
+      generatedToolsIndex = index;
       const sandboxUrl: string | undefined = env.GENERATED_TOOLS_SANDBOX_URL;
-      activeDefs.forEach((def) => {
+      approved.forEach((def) => {
         const toolName = `gen__${def.id}`;
         generatedToolStubs[toolName] = {
           description: def.description,
