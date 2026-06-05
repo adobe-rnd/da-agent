@@ -350,14 +350,17 @@ export class DAAdminClient {
   async getSiteConfig(org: string, site: string): Promise<Record<string, unknown>> {
     const key = `${org}/${site}`;
     if (!this.siteConfigCache.has(key)) {
-      const endpoint = `/config/${org}/${site}/`;
-      this.siteConfigCache.set(key, this.request<Record<string, unknown>>(endpoint));
+      const promise = this.request<Record<string, unknown>>(`/config/${org}/${site}/`);
+      promise.catch(() => this.siteConfigCache.delete(key));
+      this.siteConfigCache.set(key, promise);
     }
     return this.siteConfigCache.get(key)!;
   }
 
   /**
    * Write site multi-sheet config (FormData with `config` JSON string).
+   * Invalidates the per-request cache so subsequent reads see fresh data
+   * (e.g. saveSkillContent does read-mutate-write then callers may re-read).
    */
   async saveSiteConfig(
     org: string,
@@ -367,6 +370,8 @@ export class DAAdminClient {
     const endpoint = `/config/${org}/${site}/`;
     const formData = new FormData();
     formData.append('config', JSON.stringify(config));
-    return this.request(endpoint, { method: 'POST', body: formData });
+    const result = await this.request(endpoint, { method: 'POST', body: formData });
+    this.siteConfigCache.delete(`${org}/${site}`);
+    return result;
   }
 }

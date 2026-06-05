@@ -169,16 +169,14 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   // Phase 1 (sync): build adminClient, pageContext, attachments — no I/O.
   // Phase 2 (parallel): collab+memory, skills, MCP+tools all run concurrently.
-  // DA tools capture collabRef, which is filled in once collab resolves.
+  // DA tools await collabRef.promise at execution time (during the LLM stream).
   const early = buildEarlyChatContext(parsed.data, env);
-  const collabRef: CollabRef = { client: null };
+  const asyncCtxPromise = resolveAsyncContext(early, env);
+  const collabRef: CollabRef = { promise: asyncCtxPromise.then((c) => c.collab) };
 
   const [ctx, { skillsIndex, activeAgent, agentSkillContents, requestedSkillContents }, assembled] =
     await Promise.all([
-      resolveAsyncContext(early, env).then((fullCtx) => {
-        collabRef.client = fullCtx.collab;
-        return fullCtx;
-      }),
+      asyncCtxPromise,
       resolveSkillsAndAgent(early, parsed.data),
       assembleTools(early, env, parsed.data, collabRef),
     ]);

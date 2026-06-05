@@ -29,20 +29,23 @@ export interface AssembledTools {
 }
 
 /**
- * Mutable holder for collab — lets DA tools be created before the collab
- * WebSocket resolves. Tools read .client at execution time (during the
- * LLM stream), not at registration time.
+ * Deferred collab handle. Stores the collab resolution as a promise so
+ * DA tools can be assembled before the WebSocket connects. Each tool
+ * awaits the promise at execution time (inside the LLM stream), not at
+ * registration time — guaranteeing the resolved client is always used.
  */
 export interface CollabRef {
-  client: CollabClient | null;
+  promise: Promise<CollabClient | null>;
 }
+
+const RESOLVED_NULL_COLLAB: Promise<CollabClient | null> = Promise.resolve(null);
 
 /**
  * Assemble all tools for a /chat request. Accepts EarlyChatContext (no
  * collab/memory) so it can run in parallel with collab resolution.
  *
- * Collab is provided via a mutable ref so DA tools pick it up at
- * execution time after the caller fills it in.
+ * Collab is provided as a deferred promise so tools await the real
+ * client at execution time, eliminating any race with connection timing.
  */
 export async function assembleTools(
   ctx: EarlyChatContext,
@@ -51,15 +54,13 @@ export async function assembleTools(
     mcpServers?: Record<string, string>;
     mcpServerHeaders?: Record<string, unknown>;
   },
-  collabRef: CollabRef = { client: null },
+  collabRef: CollabRef = { promise: RESOLVED_NULL_COLLAB },
 ): Promise<AssembledTools> {
   const { adminClient, edsClient, pageContext, imsToken, attachmentMap } = ctx;
 
   const daTools = createDATools(adminClient, {
     pageContext: pageContext ?? undefined,
-    get collab() {
-      return collabRef.client;
-    },
+    getCollab: () => collabRef.promise,
     org: pageContext?.org,
     repo: pageContext?.site,
     resolveAttachmentByRef: (attachmentRef: string) => {

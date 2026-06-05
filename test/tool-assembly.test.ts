@@ -14,7 +14,7 @@ vi.mock('../src/mcp/tool-adapter.js', () => ({
     for (const id of Object.keys(mcpConfig.mcpServers)) {
       tools[`mcp__${id}__check`] = { description: 'check' };
     }
-    return { tools, clients: [{ close: vi.fn() }] };
+    return { tools, clients: [{ close: vi.fn() }], errors: [] };
   }),
 }));
 

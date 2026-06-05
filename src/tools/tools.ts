@@ -43,6 +43,7 @@ export type PageContext = {
 export type DAToolsOptions = {
   pageContext?: PageContext;
   collab?: CollabClient | null;
+  getCollab?: () => Promise<CollabClient | null>;
   resolveAttachmentByRef?: (attachmentRef: string) => {
     base64Data: string;
     mimeType: string;
@@ -50,14 +51,20 @@ export type DAToolsOptions = {
   } | null;
 };
 
-function useCollabForDoc(
+async function resolveCollab(options?: DAToolsOptions): Promise<CollabClient | null> {
+  if (options?.getCollab) return options.getCollab();
+  return options?.collab ?? null;
+}
+
+function isCollabForDoc(
   org: string,
   repo: string,
   path: string,
-  options?: DAToolsOptions,
+  collab: CollabClient | null,
+  pageContext?: PageContext,
 ): boolean {
-  if (!options?.pageContext || !options?.collab?.isConnected) return false;
-  const { org: ctxOrg, site: ctxSite, path: ctxPath, view } = options.pageContext;
+  if (!pageContext || !collab?.isConnected) return false;
+  const { org: ctxOrg, site: ctxSite, path: ctxPath, view } = pageContext;
   if (!isCollabEligibleView(view)) return false;
   return (
     ctxOrg === org && ctxSite === repo && ensureHtmlExtension(ctxPath) === ensureHtmlExtension(path)
@@ -108,8 +115,9 @@ export function createDATools(
       }),
       execute: async ({ org, repo, path }) => {
         try {
-          if (useCollabForDoc(org, repo, path, opts) && opts?.collab) {
-            const content = opts.collab.getContent();
+          const collab = await resolveCollab(opts);
+          if (isCollabForDoc(org, repo, path, collab, opts?.pageContext) && collab) {
+            const content = collab.getContent();
             if (content != null) {
               return {
                 path: ensureHtmlExtension(path),
@@ -187,12 +195,13 @@ export function createDATools(
       execute: async ({ org, repo, path, content, contentType, humanReadableSummary }) => {
         const pathWithExt = ensureHtmlExtension(path);
         try {
-          if (useCollabForDoc(org, repo, path, opts) && opts?.collab) {
-            opts.collab.applyContent(content);
+          const collab = await resolveCollab(opts);
+          if (isCollabForDoc(org, repo, path, collab, opts?.pageContext) && collab) {
+            collab.applyContent(content);
             await client.updateSource(org, repo, pathWithExt, content, contentType, {
               initiator: 'collab',
             });
-            opts.collab.disconnect();
+            collab.disconnect();
             recordPageChange(client, org, repo, pathWithExt, humanReadableSummary);
             return { path: pathWithExt, source: 'collab', updated: true };
           }

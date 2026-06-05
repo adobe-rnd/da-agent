@@ -42,8 +42,20 @@ export interface ChatContext {
 /**
  * Synchronous subset of ChatContext — available immediately without
  * waiting for collab or project memory.
+ *
+ * Defined explicitly so that new async-only fields added to ChatContext
+ * require a conscious decision about which phase owns them.
  */
-export type EarlyChatContext = Omit<ChatContext, 'collab' | 'projectMemory'>;
+export interface EarlyChatContext {
+  pageContext?: PageContext;
+  imsToken?: string;
+  daOrigin: string;
+  sourceUrl: string;
+  adminClient: DAAdminClient | null;
+  edsClient: EDSAdminClient | null;
+  attachmentMap: Map<string, Attachment>;
+  attachments: Attachment[];
+}
 
 /**
  * Build the synchronous parts of ChatContext. Returns immediately —
@@ -124,10 +136,4 @@ async function connectCollab(
   } catch {
     return null;
   }
-}
-
-/** @deprecated Use buildEarlyChatContext + resolveAsyncContext for parallel loading. */
-export async function buildChatContext(body: ParsedBody, env: Env): Promise<ChatContext> {
-  const early = buildEarlyChatContext(body, env);
-  return resolveAsyncContext(early, env);
 }
