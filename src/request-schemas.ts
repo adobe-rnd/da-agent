@@ -66,4 +66,6 @@ export const McpToolsRequestSchema = z.object({
   servers: z.record(z.string(), z.string()),
   /** Optional HTTP headers per server id (keys should match servers). */
   serverHeaders: z.record(z.string(), McpServerHeadersValueSchema).optional(),
+  /** IMS token forwarded so trusted-domain servers receive Authorization automatically. */
+  imsToken: z.string().optional(),
 });
