@@ -167,10 +167,14 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response('Invalid request body', { status: 400, headers: CORS_HEADERS });
   }
 
+  const t0 = Date.now();
+
   // Phase 1 (sync): build adminClient, pageContext, attachments — no I/O.
+  const early = buildEarlyChatContext(parsed.data, env);
+  const t1 = Date.now();
+
   // Phase 2 (parallel): collab+memory, skills, MCP+tools all run concurrently.
   // DA tools await collabRef.promise at execution time (during the LLM stream).
-  const early = buildEarlyChatContext(parsed.data, env);
   const asyncCtxPromise = resolveAsyncContext(early, env);
   const collabRef: CollabRef = { promise: asyncCtxPromise.then((c) => c.collab) };
 
@@ -180,9 +184,12 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       resolveSkillsAndAgent(early, parsed.data),
       assembleTools(early, env, parsed.data, collabRef),
     ]);
+  const t2 = Date.now();
 
   const { allTools, mcpClients, mcpConfig, mcpErrors, generatedToolsIndex, builtInServers } =
     assembled;
+
+  console.log(`[da-agent:perf] early=${t1 - t0}ms parallel=${t2 - t1}ms pre-stream=${t2 - t0}ms`);
 
   const { messages, requestedSkills, imsToken, attachments = [], sessionId } = parsed.data;
 
