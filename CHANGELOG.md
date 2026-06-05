@@ -1,3 +1,17 @@
+## [1.24.1](https://github.com/adobe-rnd/da-agent/compare/v1.24.0...v1.24.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **perf:** harden parallelization correctness and cache safety ([2ddb591](https://github.com/adobe-rnd/da-agent/commit/2ddb59137f19d187e3978094a8819b6aea91280f))
+
+
+### Performance Improvements
+
+* **da-admin:** memoize getSiteConfig per client instance ([23d67d2](https://github.com/adobe-rnd/da-agent/commit/23d67d2277fa730bd4c8e117bc69009b44704393))
+* **generated-tools:** merge index + approved loading into single pass ([193a298](https://github.com/adobe-rnd/da-agent/commit/193a2982cff57135b473eb2bcc348a83e9596deb))
+* **server:** parallelize pre-stream pipeline and reduce collab timeout ([404d059](https://github.com/adobe-rnd/da-agent/commit/404d059664ae19dece9ce74789420461c78191a0))
+
 # [1.24.0](https://github.com/adobe-rnd/da-agent/compare/v1.23.0...v1.24.0) (2026-06-05)
 
 
