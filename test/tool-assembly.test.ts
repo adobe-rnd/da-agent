@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { assembleTools } from '../src/tool-assembly.js';
-import type { ChatContext } from '../src/chat-context.js';
+import type { EarlyChatContext } from '../src/chat-context.js';
 
 vi.mock('../src/tools/tools.js', () => ({
   createDATools: vi.fn(() => ({ content_list: { description: 'list' } })),
@@ -14,7 +14,7 @@ vi.mock('../src/mcp/tool-adapter.js', () => ({
     for (const id of Object.keys(mcpConfig.mcpServers)) {
       tools[`mcp__${id}__check`] = { description: 'check' };
     }
-    return { tools, clients: [{ close: vi.fn() }] };
+    return { tools, clients: [{ close: vi.fn() }], errors: [] };
   }),
 }));
 
@@ -30,8 +30,10 @@ vi.mock('../src/mcp/built-in-servers.js', () => ({
 }));
 
 vi.mock('../src/generated-tools/loader.js', () => ({
-  loadGeneratedToolsIndex: vi.fn(async () => ({ tools: [], source: 'none' })),
-  loadApprovedGeneratedTools: vi.fn(async () => []),
+  loadGeneratedTools: vi.fn(async () => ({
+    index: { tools: [], source: 'none' },
+    approved: [],
+  })),
 }));
 
 vi.mock('../src/generated-tools/sandbox-client.js', () => ({
@@ -43,18 +45,16 @@ vi.mock('../src/tools/tool-overrides.js', () => ({
   applyToolOverrides: vi.fn(() => []),
 }));
 
-function mockCtx(overrides?: Partial<ChatContext>): ChatContext {
+function mockCtx(overrides?: Partial<EarlyChatContext>): EarlyChatContext {
   return {
     pageContext: { org: 'adobe', site: 'docs', path: '/index.html' },
     imsToken: 'tok',
     daOrigin: 'https://admin.da.live',
     sourceUrl: 'https://admin.da.live/source/adobe/docs/index.html',
-    adminClient: { getSiteConfig: vi.fn() } as unknown as ChatContext['adminClient'],
-    edsClient: {} as ChatContext['edsClient'],
-    collab: null,
+    adminClient: { getSiteConfig: vi.fn() } as unknown as EarlyChatContext['adminClient'],
+    edsClient: {} as EarlyChatContext['edsClient'],
     attachmentMap: new Map(),
     attachments: [],
-    projectMemory: null,
     ...overrides,
   };
 }

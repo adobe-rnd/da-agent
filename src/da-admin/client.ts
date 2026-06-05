@@ -336,15 +336,31 @@ export class DAAdminClient {
   }
 
   /**
+   * Per-request cache for getSiteConfig. Multiple callers (skills loader,
+   * tool-overrides, legacy fallback) need the same config within a single
+   * /chat request — this avoids redundant round-trips to da-admin.
+   * Safe because DAAdminClient instances are created per-request.
+   */
+  private siteConfigCache = new Map<string, Promise<Record<string, unknown>>>();
+
+  /**
    * Read site multi-sheet config (KV) — same JSON as DA `/config/{org}/{site}/`.
+   * Results are memoized for the lifetime of this client instance (one /chat request).
    */
   async getSiteConfig(org: string, site: string): Promise<Record<string, unknown>> {
-    const endpoint = `/config/${org}/${site}/`;
-    return this.request<Record<string, unknown>>(endpoint);
+    const key = `${org}/${site}`;
+    if (!this.siteConfigCache.has(key)) {
+      const promise = this.request<Record<string, unknown>>(`/config/${org}/${site}/`);
+      promise.catch(() => this.siteConfigCache.delete(key));
+      this.siteConfigCache.set(key, promise);
+    }
+    return this.siteConfigCache.get(key)!;
   }
 
   /**
    * Write site multi-sheet config (FormData with `config` JSON string).
+   * Invalidates the per-request cache so subsequent reads see fresh data
+   * (e.g. saveSkillContent does read-mutate-write then callers may re-read).
    */
   async saveSiteConfig(
     org: string,
@@ -354,6 +370,8 @@ export class DAAdminClient {
     const endpoint = `/config/${org}/${site}/`;
     const formData = new FormData();
     formData.append('config', JSON.stringify(config));
-    return this.request(endpoint, { method: 'POST', body: formData });
+    const result = await this.request(endpoint, { method: 'POST', body: formData });
+    this.siteConfigCache.delete(`${org}/${site}`);
+    return result;
   }
 }

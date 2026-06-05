@@ -7,18 +7,15 @@ import type { MCPServerConfig, BuiltInMCPServerConfig } from './mcp/types.js';
 import { createCanvasClientTools, createDATools, createEDSTools } from './tools/tools.js';
 import { connectAndRegisterMCPTools, type MCPConnectionError } from './mcp/tool-adapter.js';
 import { MCPClient } from './mcp/client.js';
-import {
-  loadApprovedGeneratedTools,
-  loadGeneratedToolsIndex,
-  type GeneratedToolsIndex,
-} from './generated-tools/loader.js';
+import { loadGeneratedTools, type GeneratedToolsIndex } from './generated-tools/loader.js';
 import { callSandbox } from './generated-tools/sandbox-client.js';
 import { loadDisabledTools, applyToolOverrides } from './tools/tool-overrides.js';
 import { normalizeMcpHeadersInput } from './request-schemas.js';
 import { DA_OAUTH_CLIENT_ID } from './auth.js';
 import { getBuiltInMcpServers } from './mcp/built-in-servers.js';
 import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
-import type { ChatContext } from './chat-context.js';
+import type { EarlyChatContext } from './chat-context.js';
+import type { CollabClient } from './collab-client.js';
 
 export interface AssembledTools {
   /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -31,19 +28,39 @@ export interface AssembledTools {
   builtInServers: Record<string, BuiltInMCPServerConfig>;
 }
 
+/**
+ * Deferred collab handle. Stores the collab resolution as a promise so
+ * DA tools can be assembled before the WebSocket connects. Each tool
+ * awaits the promise at execution time (inside the LLM stream), not at
+ * registration time — guaranteeing the resolved client is always used.
+ */
+export interface CollabRef {
+  promise: Promise<CollabClient | null>;
+}
+
+const RESOLVED_NULL_COLLAB: Promise<CollabClient | null> = Promise.resolve(null);
+
+/**
+ * Assemble all tools for a /chat request. Accepts EarlyChatContext (no
+ * collab/memory) so it can run in parallel with collab resolution.
+ *
+ * Collab is provided as a deferred promise so tools await the real
+ * client at execution time, eliminating any race with connection timing.
+ */
 export async function assembleTools(
-  ctx: ChatContext,
+  ctx: EarlyChatContext,
   env: Env,
   body: {
     mcpServers?: Record<string, string>;
     mcpServerHeaders?: Record<string, unknown>;
   },
+  collabRef: CollabRef = { promise: RESOLVED_NULL_COLLAB },
 ): Promise<AssembledTools> {
-  const { adminClient, edsClient, collab, pageContext, imsToken, attachmentMap } = ctx;
+  const { adminClient, edsClient, pageContext, imsToken, attachmentMap } = ctx;
 
   const daTools = createDATools(adminClient, {
     pageContext: pageContext ?? undefined,
-    collab: collab ?? undefined,
+    getCollab: () => collabRef.promise,
     org: pageContext?.org,
     repo: pageContext?.site,
     resolveAttachmentByRef: (attachmentRef: string) => {
@@ -131,24 +148,20 @@ export async function assembleTools(
     mcpConfig.toolAllowPatterns = [...serversWithTools].map((serverId) => `mcp__${serverId}__*`);
   }
 
-  // Load approved generated tool defs and register stubs (execution delegates to sandbox).
+  // Load generated tool defs in a single pass and register approved stubs.
   let generatedToolsIndex: GeneratedToolsIndex = { tools: [], source: 'none' };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const generatedToolStubs: Record<string, any> = {};
   if (adminClient && pageContext && env.GENERATED_TOOLS_ENABLED === 'true') {
     try {
-      generatedToolsIndex = await loadGeneratedToolsIndex(
+      const { index, approved } = await loadGeneratedTools(
         adminClient,
         pageContext.org,
         pageContext.site,
       );
-      const activeDefs = await loadApprovedGeneratedTools(
-        adminClient,
-        pageContext.org,
-        pageContext.site,
-      );
+      generatedToolsIndex = index;
       const sandboxUrl: string | undefined = env.GENERATED_TOOLS_SANDBOX_URL;
-      activeDefs.forEach((def) => {
+      approved.forEach((def) => {
         const toolName = `gen__${def.id}`;
         generatedToolStubs[toolName] = {
           description: def.description,

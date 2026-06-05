@@ -24,9 +24,9 @@ import {
   expandLatestUserAttachmentsForModel,
 } from './message-pipeline.js';
 import { buildSystemPrompt } from './prompt-builder.js';
-import { buildChatContext } from './chat-context.js';
+import { buildEarlyChatContext, resolveAsyncContext } from './chat-context.js';
 import { resolveSkillsAndAgent } from './skill-resolver.js';
-import { assembleTools } from './tool-assembly.js';
+import { assembleTools, type CollabRef } from './tool-assembly.js';
 import {
   resolveCompactThreshold,
   shouldAutoCompact,
@@ -167,13 +167,29 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response('Invalid request body', { status: 400, headers: CORS_HEADERS });
   }
 
-  const ctx = await buildChatContext(parsed.data, env);
+  const t0 = Date.now();
 
-  const { skillsIndex, activeAgent, agentSkillContents, requestedSkillContents } =
-    await resolveSkillsAndAgent(ctx, parsed.data);
+  // Phase 1 (sync): build adminClient, pageContext, attachments — no I/O.
+  const early = buildEarlyChatContext(parsed.data, env);
+  const t1 = Date.now();
+
+  // Phase 2 (parallel): collab+memory, skills, MCP+tools all run concurrently.
+  // DA tools await collabRef.promise at execution time (during the LLM stream).
+  const asyncCtxPromise = resolveAsyncContext(early, env);
+  const collabRef: CollabRef = { promise: asyncCtxPromise.then((c) => c.collab) };
+
+  const [ctx, { skillsIndex, activeAgent, agentSkillContents, requestedSkillContents }, assembled] =
+    await Promise.all([
+      asyncCtxPromise,
+      resolveSkillsAndAgent(early, parsed.data),
+      assembleTools(early, env, parsed.data, collabRef),
+    ]);
+  const t2 = Date.now();
 
   const { allTools, mcpClients, mcpConfig, mcpErrors, generatedToolsIndex, builtInServers } =
-    await assembleTools(ctx, env, parsed.data);
+    assembled;
+
+  console.log(`[da-agent:perf] early=${t1 - t0}ms parallel=${t2 - t1}ms pre-stream=${t2 - t0}ms`);
 
   const { messages, requestedSkills, imsToken, attachments = [], sessionId } = parsed.data;
 
