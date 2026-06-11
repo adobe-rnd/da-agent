@@ -1,3 +1,10 @@
+## [1.24.3](https://github.com/adobe-rnd/da-agent/compare/v1.24.2...v1.24.3) (2026-06-11)
+
+
+### Bug Fixes
+
+* Separate timeouts for tool calls ([#46](https://github.com/adobe-rnd/da-agent/issues/46)) ([b4be885](https://github.com/adobe-rnd/da-agent/commit/b4be8858e8c5fb54dedc9f8839e08115bdd27ce3))
+
 ## [1.24.2](https://github.com/adobe-rnd/da-agent/compare/v1.24.1...v1.24.2) (2026-06-05)
 
 
