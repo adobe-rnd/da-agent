@@ -34,6 +34,7 @@ interface JsonRpcResponse {
 export interface MCPClientOptions {
   headers?: Record<string, string>;
   timeout?: number;
+  callToolTimeout?: number;
 }
 
 export class MCPClient {
@@ -42,6 +43,8 @@ export class MCPClient {
   private headers: Record<string, string>;
 
   private timeout: number;
+
+  private callToolTimeout: number;
 
   private sessionId: string | null = null;
 
@@ -53,6 +56,7 @@ export class MCPClient {
     this.url = url;
     this.headers = options?.headers ?? {};
     this.timeout = options?.timeout ?? 30000;
+    this.callToolTimeout = options?.callToolTimeout ?? 60000;
   }
 
   private buildRequest(method: string, params?: Record<string, unknown>): JsonRpcRequest {
@@ -74,7 +78,11 @@ export class MCPClient {
    * Send a JSON-RPC request and get the response.
    * Handles both application/json and text/event-stream responses.
    */
-  private async send(request: JsonRpcRequest): Promise<JsonRpcResponse | null> {
+  private async send(
+    request: JsonRpcRequest,
+    timeoutOverride?: number,
+  ): Promise<JsonRpcResponse | null> {
+    const effectiveTimeout = timeoutOverride ?? this.timeout;
     const reqHeaders: Record<string, string> = {
       ...this.headers,
       'Content-Type': 'application/json',
@@ -86,7 +94,7 @@ export class MCPClient {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
     try {
       const response = await fetch(this.url, {
@@ -124,7 +132,7 @@ export class MCPClient {
     } catch (e) {
       clearTimeout(timeoutId);
       if (e instanceof Error && e.name === 'AbortError') {
-        throw new Error(`MCP request timed out after ${this.timeout}ms`);
+        throw new Error(`MCP request timed out after ${effectiveTimeout}ms`);
       }
       throw e;
     }
@@ -219,6 +227,7 @@ export class MCPClient {
 
     const response = await this.send(
       this.buildRequest('tools/call', { name, arguments: args ?? {} }),
+      this.callToolTimeout,
     );
     return this.unwrapResult<MCPToolResult>(response);
   }

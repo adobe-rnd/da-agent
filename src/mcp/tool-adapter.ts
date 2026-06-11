@@ -133,7 +133,7 @@ export async function connectAndRegisterMCPTools(
     mcpServers: Record<string, MCPServerConfig>;
     toolAllowPatterns: string[];
   },
-  options?: { headers?: Record<string, string>; timeout?: number },
+  options?: { headers?: Record<string, string>; timeout?: number; callToolTimeout?: number },
 ): Promise<{ tools: Record<string, Tool>; clients: MCPClient[]; errors: MCPConnectionError[] }> {
   const tools: Record<string, Tool> = {};
   const clients: MCPClient[] = [];
@@ -160,6 +160,7 @@ export async function connectAndRegisterMCPTools(
       const client = new MCPClient(url, {
         headers: serverHeaders,
         timeout: options?.timeout ?? 15000,
+        callToolTimeout: options?.callToolTimeout ?? 60000,
       });
 
       try {
