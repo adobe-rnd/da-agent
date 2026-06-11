@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "name": "DA Content Plugin",
+    "pluginRoot": "."
+  },
+  "plugins": [
+    {
+      "name": "da-content",
+      "version": "1.0.0",
+      "source": ".",
+      "description": "Document Authoring (DA) plugin for AO. Bundles DA content management skills, EDS publishing MCP server, and A2A agent card for content delegation."
+    }
+  ]
+}

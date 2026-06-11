@@ -1,0 +1,36 @@
+# A2A agent card pointing at da-agent's A2A endpoint.
+# AO uses this to discover and delegate tasks to da-agent.
+#
+# For local development, url should be http://localhost:4002/a2a/rpc
+# For production, update to the deployed Worker URL.
+
+name: DA Content Agent
+description: >-
+  Document Authoring (DA) agent for Adobe Experience Manager.
+  Manages content read/write, Edge Delivery Services preview/publish,
+  and live collaborative editing via da-collab.
+url: http://localhost:4002/a2a/rpc
+version: "1.0.0"
+capabilities:
+  streaming: true
+  pushNotifications: false
+skills:
+  - id: content-management
+    name: Content Management
+    description: >-
+      Read, create, update, delete, copy, and move content in DA repositories.
+      Supports HTML documents, media files, and structured content.
+  - id: eds-publishing
+    name: Edge Delivery Services Publishing
+    description: >-
+      Preview and publish content to Adobe Edge Delivery Services (EDS).
+      Manages the content lifecycle from draft to live.
+  - id: live-editing
+    name: Live Collaborative Editing
+    description: >-
+      Read and update content in real-time via da-collab WebSocket sessions.
+      Supports concurrent editing with other users.
+defaultInputModes:
+  - text
+defaultOutputModes:
+  - text

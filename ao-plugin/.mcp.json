@@ -1,0 +1,28 @@
+{
+  "auth_providers": [
+    {
+      "name": "ims-passthrough",
+      "passthrough": {
+        "headers": { "authorization": "authorization" }
+      }
+    }
+  ],
+  "mcp_servers": {
+    "servers": [
+      {
+        "name": "da-publish",
+        "source": "http://localhost:4002/mcp/eds",
+        "transport": "streamable_http",
+        "auth": "ims-passthrough",
+        "env_overrides": {
+          "stage": {
+            "source": "https://da-agent-ci.adobe.workers.dev/mcp/eds"
+          },
+          "prod": {
+            "source": "https://da-agent.adobe.workers.dev/mcp/eds"
+          }
+        }
+      }
+    ]
+  }
+}

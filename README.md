@@ -12,6 +12,8 @@ An AI assistant Cloudflare Worker for the [Document Authoring (DA)](https://da.l
 - **Collab integration** — When the user is in edit view, reads and writes go through the live Y.js collaborative session (`da-collab` service binding) so changes appear in real time
 - **Page context awareness** — The current org, site, path, and view are injected into the system prompt and used as defaults for all tool calls
 - **Custom skills** — Customers define reusable workflow instructions as markdown files stored at `/.da/skills/` in their DA repository; the agent loads and injects them automatically on each request
+- **AO marketplace integration** — Optionally fetches plugin skills and MCP servers from a running [Agent Orchestrator (AO)](https://github.com/nickvend/ao) instance, making marketplace content available alongside native DA skills
+- **A2A agent protocol** — Exposes da-agent as an A2A-compatible agent so AO (or any A2A orchestrator) can discover and delegate content authoring tasks
 
 ## Architecture
 
@@ -23,21 +25,35 @@ da-agent (Cloudflare Worker)
   ├── Vercel AI SDK streamText → Amazon Bedrock (claude-sonnet-4-6)
   ├── DA tools → DAADMIN service binding → da-admin Worker
   ├── Collab client → DACOLLAB service binding → da-collab Worker
-  └── Skills loader → DAADMIN (reads /.da/skills/*.md)
+  ├── Skills loader → DAADMIN (reads /.da/skills/*.md)
+  ├── AO marketplace → AO backend REST API (optional, when AO_BACKEND_URL set)
+  ├── A2A protocol → /.well-known/agent.json + /a2a/rpc
+  └── EDS MCP server → POST /mcp/eds (streamable HTTP transport)
 ```
 
 ## Project structure
 
 ```
 src/
-  server.ts            # Worker entry point, chat handler, system prompt, skills loader
+  server.ts            # Worker entry point, route dispatch, chat handler
   collab-client.ts     # Y.js collab session client
+  skill-resolver.ts    # Skills + agent preset loading (DA + AO)
+  tool-assembly.ts     # Tool registry builder (DA/EDS/MCP/AO)
   da-admin/
     client.ts          # DA Admin API client (wraps service binding calls)
     types.ts           # TypeScript types for DA Admin API
   tools/
     tools.ts           # Vercel AI SDK tool definitions wrapping DAAdminClient
     utils.ts           # Shared utilities (path helpers)
+  ao/
+    marketplace-client.ts  # AO REST API client
+    skill-adapter.ts       # AO SKILL.md → DA skill format
+    mcp-adapter.ts         # AO MCP configs → DA RemoteMCPServerConfig
+    integration.ts         # AO context bootstrap facade
+  a2a/
+    agent-card.ts      # A2A agent card endpoint
+    rpc-handler.ts     # A2A JSON-RPC handler
+ao-plugin/             # Ready-to-publish AO marketplace plugin
 samples/
   skills/
     translate-content.md  # Example skill file

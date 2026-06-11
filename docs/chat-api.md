@@ -134,3 +134,40 @@ Returns:
 ```
 
 Tools are available in `/chat` requests via the same `mcpServers` map. Tool names are prefixed `mcp__<serverId>__<toolName>`.
+
+## A2A endpoints
+
+See [AO Integration](ao-integration.md) for full details.
+
+### Agent card
+
+`GET /.well-known/agent.json` — A2A agent card for discovery.
+
+Also available at `/a2a/.well-known/agent.json` (AO convention).
+
+Returns the agent's name, description, capabilities, and skills in A2A format.
+
+### JSON-RPC
+
+`POST /a2a/rpc` — A2A task execution.
+
+Accepts JSON-RPC 2.0 requests. Supported methods:
+
+| Method | Description |
+|---|---|
+| `tasks/send` | Synchronous task — runs through the `/chat` pipeline and returns the result |
+| `tasks/sendSubscribe` | Streaming variant (falls back to synchronous in the PoC) |
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tasks/send",
+  "params": {
+    "message": {
+      "role": "user",
+      "parts": [{ "type": "text", "text": "List the pages under /blog" }]
+    }
+  }
+}
+```
