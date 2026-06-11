@@ -38,6 +38,8 @@ export const ChatRequestSchema = z.object({
   imsToken: z.string().optional(),
   agentId: z.string().optional(),
   sessionId: z.string().min(1).max(128).optional(),
+  /** When set to "ao", da-agent proxies the chat through AO's A2A endpoint instead of calling Bedrock directly. */
+  harness: z.enum(['da-agent', 'ao']).optional(),
   requestedSkills: z.array(z.string()).optional(),
   mcpServers: z.record(z.string(), z.string()).optional(),
   /** Optional HTTP headers per server id (keys must match mcpServers). Sent on every MCP request to that URL. */

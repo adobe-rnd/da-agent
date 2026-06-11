@@ -19,6 +19,7 @@ import { DA_OAUTH_CLIENT_ID } from './auth.js';
 import { getBuiltInMcpServers } from './mcp/built-in-servers.js';
 import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
 import type { ChatContext } from './chat-context.js';
+import type { AOContext } from './ao/integration.js';
 
 export interface AssembledTools {
   /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -38,6 +39,7 @@ export async function assembleTools(
     mcpServers?: Record<string, string>;
     mcpServerHeaders?: Record<string, unknown>;
   },
+  aoCtx?: AOContext | null,
 ): Promise<AssembledTools> {
   const { adminClient, edsClient, collab, pageContext, imsToken, attachmentMap } = ctx;
 
@@ -93,6 +95,12 @@ export async function assembleTools(
       url: builtIn.url,
       ...(Object.keys(headers).length > 0 ? { headers } : {}),
     };
+  }
+
+  if (aoCtx) {
+    for (const [id, serverConfig] of Object.entries(aoCtx.mcpServers)) {
+      allMcpServers[id] = serverConfig;
+    }
   }
 
   const mcpConfig =

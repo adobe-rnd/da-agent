@@ -28,6 +28,12 @@ import { buildSystemPrompt } from './prompt-builder.js';
 import { buildChatContext } from './chat-context.js';
 import { resolveSkillsAndAgent } from './skill-resolver.js';
 import { assembleTools } from './tool-assembly.js';
+import { resolveAOContext } from './ao/integration.js';
+import { handleAOProxiedChat } from './ao/chat-adapter.js';
+import { handleAgentCardRequest } from './a2a/agent-card.js';
+import { handleA2ARpc } from './a2a/rpc-handler.js';
+import { handleMCPRequest } from './mcp-server/handler.js';
+import { createEDSMCPRegistry } from './mcp-server/eds-registry.js';
 import {
   resolveCompactThreshold,
   shouldAutoCompact,
@@ -80,9 +86,92 @@ export default {
       return handleMcpToolsList(request, env);
     }
 
+    if (
+      url.pathname === '/.well-known/agent.json' ||
+      url.pathname === '/a2a/.well-known/agent.json'
+    ) {
+      if (request.method === 'GET') {
+        return handleAgentCardRequest(request.url);
+      }
+    }
+
+    if (url.pathname === '/a2a/rpc' && request.method === 'POST') {
+      return handleA2ARpc(request, env);
+    }
+
+    if (url.pathname === '/ao/status' && request.method === 'GET') {
+      const authHeader = request.headers.get('Authorization') ?? '';
+      const imsToken = authHeader.replace(/^Bearer\s+/i, '');
+      return handleAOStatus(env, imsToken || undefined);
+    }
+
+    if (url.pathname === '/mcp/eds' && request.method === 'POST') {
+      const authHeader = request.headers.get('Authorization') ?? '';
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      if (!token) {
+        return new Response('Unauthorized', { status: 401, headers: CORS_HEADERS });
+      }
+      return handleMCPRequest(request, createEDSMCPRegistry(token));
+    }
+
     return new Response('Not found', { status: 404 });
   },
 } satisfies ExportedHandler<Env>;
+
+async function handleAOStatus(env: Env, imsToken?: string): Promise<Response> {
+  if (!env.AO_BACKEND_URL) {
+    return new Response(
+      JSON.stringify({ connected: false, reason: 'AO_BACKEND_URL not configured' }),
+      { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  try {
+    const aoCtx = await resolveAOContext(env.AO_BACKEND_URL, imsToken);
+    if (!aoCtx) {
+      return new Response(JSON.stringify({ connected: false, reason: 'AO unreachable' }), {
+        status: 200,
+        headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        connected: true,
+        backendUrl: env.AO_BACKEND_URL,
+        plugins: aoCtx.plugins.map((p) => ({
+          name: p.name,
+          marketplace: p.marketplace_name,
+          version: p.version,
+          description: p.description,
+          status: p.status,
+          skills: p.discovered_skills.map((s) => ({
+            name: s.name,
+            description: s.description,
+          })),
+        })),
+        skills: aoCtx.skills.map((s) => ({
+          id: s.id,
+          title: s.title,
+        })),
+        mcpServers: Object.entries(aoCtx.mcpServers).map(([id, cfg]) => ({
+          id,
+          url: cfg.url,
+          type: cfg.type,
+        })),
+      }),
+      { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+    );
+  } catch (err) {
+    return new Response(
+      JSON.stringify({
+        connected: false,
+        reason: err instanceof Error ? err.message : String(err),
+      }),
+      { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } },
+    );
+  }
+}
 
 /**
  * Connect to the given MCP servers and list their individual tools.
@@ -179,13 +268,26 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return new Response('Invalid request body', { status: 400, headers: CORS_HEADERS });
   }
 
+  if (parsed.data.harness === 'ao' && env.AO_BACKEND_URL) {
+    return handleAOProxiedChat(
+      {
+        messages: parsed.data.messages,
+        imsToken: parsed.data.imsToken,
+        sessionId: parsed.data.sessionId,
+      },
+      env.AO_BACKEND_URL,
+    );
+  }
+
   const ctx = await buildChatContext(parsed.data, env);
 
+  const aoCtx = await resolveAOContext(env.AO_BACKEND_URL, ctx.imsToken);
+
   const { skillsIndex, activeAgent, agentSkillContents, requestedSkillContents } =
-    await resolveSkillsAndAgent(ctx, parsed.data);
+    await resolveSkillsAndAgent(ctx, parsed.data, aoCtx);
 
   const { allTools, mcpClients, mcpConfig, mcpErrors, generatedToolsIndex, builtInServers } =
-    await assembleTools(ctx, env, parsed.data);
+    await assembleTools(ctx, env, parsed.data, aoCtx);
 
   const { messages, requestedSkills, imsToken, attachments = [], sessionId } = parsed.data;
 

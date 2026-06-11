@@ -68,6 +68,8 @@ declare namespace Cloudflare {
     GOVERNANCE_AGENT_URL?: string;
     /** Comma-separated domain patterns trusted to receive IMS tokens (e.g. "*.adobe.io,*.corp.ethos*.adobe.net") */
     TRUSTED_MCP_DOMAINS?: string;
+    /** Base URL of a running AO backend instance for marketplace integration (e.g. "http://localhost:8080") */
+    AO_BACKEND_URL?: string;
   }
 }
 interface Env extends Cloudflare.Env {}

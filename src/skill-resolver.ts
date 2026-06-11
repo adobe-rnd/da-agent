@@ -10,6 +10,8 @@ import { loadAgentPreset } from './agents/loader.js';
 import { getBuiltinPreset } from './agents/builtin-presets.js';
 import type { AgentPreset } from './agents/loader.js';
 import type { ChatContext } from './chat-context.js';
+import { mergeAOSkillsIntoIndex, isAOSkill } from './ao/skill-adapter.js';
+import { resolveAOSkillBody, type AOContext } from './ao/integration.js';
 
 export interface ResolvedSkills {
   skillsIndex: SkillsIndex | null;
@@ -21,6 +23,7 @@ export interface ResolvedSkills {
 export async function resolveSkillsAndAgent(
   ctx: ChatContext,
   body: { agentId?: string; requestedSkills?: string[] },
+  aoCtx?: AOContext | null,
 ): Promise<ResolvedSkills> {
   const { adminClient, pageContext } = ctx;
   const { agentId, requestedSkills } = body;
@@ -36,6 +39,10 @@ export async function resolveSkillsAndAgent(
     } catch (err) {
       console.warn('[da-agent] failed to load skills index:', err);
     }
+  }
+
+  if (aoCtx && aoCtx.skills.length > 0) {
+    skillsIndex = mergeAOSkillsIntoIndex(skillsIndex, aoCtx.skills);
   }
 
   let activeAgent: AgentPreset | null = null;
@@ -78,10 +85,20 @@ export async function resolveSkillsAndAgent(
 
   let requestedSkillContents: Record<string, string> = {};
   if (requestedSkills && requestedSkills.length > 0) {
-    if (adminClient && pageContext) {
-      const entries = await Promise.all(
-        requestedSkills.map(async (sid) => {
-          if (agentSkillContents[sid]) return [sid, agentSkillContents[sid]] as const;
+    const entries = await Promise.all(
+      requestedSkills.map(async (sid) => {
+        if (agentSkillContents[sid]) return [sid, agentSkillContents[sid]] as const;
+
+        if (isAOSkill(sid) && aoCtx) {
+          try {
+            const content = await resolveAOSkillBody(aoCtx, sid);
+            return content ? ([sid, content] as const) : null;
+          } catch {
+            return null;
+          }
+        }
+
+        if (adminClient && pageContext) {
           try {
             const content = await loadSkillBodyFromFolder(
               adminClient,
@@ -93,11 +110,13 @@ export async function resolveSkillsAndAgent(
           } catch {
             return null;
           }
-        }),
-      );
-      const loaded = Object.fromEntries(entries.filter(Boolean) as [string, string][]);
-      requestedSkillContents = { ...requestedSkillContents, ...loaded };
-    }
+        }
+
+        return null;
+      }),
+    );
+    const loaded = Object.fromEntries(entries.filter(Boolean) as [string, string][]);
+    requestedSkillContents = { ...requestedSkillContents, ...loaded };
   }
 
   return { skillsIndex, activeAgent, agentSkillContents, requestedSkillContents };
