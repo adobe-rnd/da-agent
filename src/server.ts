@@ -21,6 +21,7 @@ import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist
 import {
   resolveApprovals,
   stripClientOnlyToolInputs,
+  ensureOrphanedToolResults,
   expandUserSelectionContextForModel,
   expandLatestUserAttachmentsForModel,
 } from './message-pipeline.js';
@@ -225,7 +226,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return buildApprovalContinuationResponse(toolOutputs, CORS_HEADERS);
   }
 
-  const strippedForModel = stripClientOnlyToolInputs(processedMessages);
+  const withOrphanResults = ensureOrphanedToolResults(processedMessages);
+  const strippedForModel = stripClientOnlyToolInputs(withOrphanResults);
   const sessionPattern = trailingAssistantAlreadySuggestedSkill(strippedForModel)
     ? null
     : detectSessionUserPattern(strippedForModel);
@@ -298,6 +300,19 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     model: bedrock('global.anthropic.claude-sonnet-4-6'),
     onError: (error) => {
       console.error('[da-agent] streamText error:', formatErrorForLog(error));
+
+      // Diagnostic: capture full payload when the Anthropic API rejects orphaned tool_use
+      // blocks. This should be rare (the defensive ensureOrphanedToolResults pipeline step
+      // injects synthetic results) but if it ever fires we want the exact messages array
+      // to write a deterministic regression test.
+      const errMsg = error instanceof Error ? error.message : String(error);
+      if (errMsg.includes('tool_use') && errMsg.includes('tool_result')) {
+        console.error(
+          '[da-agent] orphaned tool_use slipped past pipeline — modelMessages:\n',
+          JSON.stringify(modelMessages, null, 2),
+        );
+      }
+
       ctx.collab?.disconnect();
       cleanupMCP();
     },
