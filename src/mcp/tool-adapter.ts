@@ -160,7 +160,7 @@ export async function connectAndRegisterMCPTools(
       const client = new MCPClient(url, {
         headers: serverHeaders,
         timeout: options?.timeout ?? 15000,
-        callToolTimeout: options?.callToolTimeout ?? 60000,
+        callToolTimeout: options?.callToolTimeout,
       });
 
       try {
