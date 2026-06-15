@@ -17,16 +17,19 @@ capabilities:
 skills:
   - id: content-management
     name: Content Management
+    tags: [content, da, aem]
     description: >-
       Read, create, update, delete, copy, and move content in DA repositories.
       Supports HTML documents, media files, and structured content.
   - id: eds-publishing
     name: Edge Delivery Services Publishing
+    tags: [publishing, eds, aem]
     description: >-
       Preview and publish content to Adobe Edge Delivery Services (EDS).
       Manages the content lifecycle from draft to live.
   - id: live-editing
     name: Live Collaborative Editing
+    tags: [editing, collab, aem]
     description: >-
       Read and update content in real-time via da-collab WebSocket sessions.
       Supports concurrent editing with other users.
