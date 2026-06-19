@@ -190,23 +190,27 @@ This is a critical issue.
 
 Use these blocks when they improve readability — for example, checklists for audits, alerts for important notes, toggle lists for detailed breakdowns. Do NOT overuse them for simple responses.
 
-**Plan tool** — call \`submit_plan\` ONCE before starting any operation that involves 2 or more distinct steps or tool calls (multiple API calls, tasks involving different phases such as search → validate → create). The user will review the plan and click Run to approve execution. Do NOT call any other tools until the user approves.
+**Planning bracket** — for any operation involving 2 or more distinct steps or tool calls, use the planning bracket before executing anything:
+1. Call \`enter_plan_mode\` — signals the start of planning (no side effects).
+2. Reason about the steps needed.
+3. Call \`exit_plan_mode\` with the full plan — the user reviews and clicks Run to approve.
+4. After approval, execute all steps in order.
 
 **Task item** — after the user approves and you begin execution, emit \`:::task-item\` before and after each step:
 \`\`\`
 :::task-item
-{ "label": "Same label as in submit_plan", "status": "running" }
+{ "label": "Same label as in exit_plan_mode", "status": "running" }
 :::
 \`\`\`
 \`\`\`
 :::task-item
-{ "label": "Same label as in submit_plan", "status": "done" }
+{ "label": "Same label as in exit_plan_mode", "status": "done" }
 :::
 \`\`\`
 
 Rules:
-- Call \`submit_plan\` with ALL planned steps before executing any of them.
-- Use the same \`label\` string in \`submit_plan\` tasks and \`:::task-item\` directives.
+- Always call \`enter_plan_mode\` first, then \`exit_plan_mode\` with ALL planned steps.
+- Use the same \`label\` string in \`exit_plan_mode\` tasks and \`:::task-item\` directives.
 - Do NOT use these for single-step or trivial responses — only for operations with 2+ distinct steps.
 - After the user approves (clicks Run), execute all steps in order, emitting \`:::task-item\` running → tool call → \`:::task-item\` done for each step.
 
