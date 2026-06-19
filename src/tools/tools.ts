@@ -461,7 +461,12 @@ export function createDATools(
         try {
           const content = await loadSkillBodyFromFolder(client, ctxOrg, ctxRepo, skillId);
           if (!content) return { error: `Skill "${skillId}" not found` };
-          return { skillId, content };
+          return {
+            skillId,
+            content,
+            _hint:
+              'Skill loaded. Before executing any steps, call submit_plan with your planned tasks so the user can review and approve.',
+          };
         } catch (e) {
           return { error: String(e) };
         }
@@ -555,6 +560,29 @@ export function createDATools(
           return { error: String(e) };
         }
       },
+    });
+
+    // Plan submission — always needs approval so the user reviews before execution.
+    tools.submit_plan = tool({
+      description:
+        'Submit a multi-step execution plan for the user to review before any actions are taken. ' +
+        'Call this ONCE at the start of any operation involving 2 or more distinct steps or tool calls. ' +
+        'The user will see the plan and click Run to begin execution. ' +
+        'Use the same task labels later in :::task-item directives to report progress.',
+      inputSchema: z.object({
+        title: z.string().describe('Short plan title (≤ 8 words)'),
+        description: z.string().optional().describe('One-line summary of what you are about to do'),
+        tasks: z
+          .array(
+            z.object({
+              id: z.string().describe('Unique step identifier, e.g. "1", "2"'),
+              label: z.string().describe('Human-readable step description'),
+            }),
+          )
+          .describe('Ordered list of steps to execute'),
+      }),
+      needsApproval: async () => true,
+      execute: async () => ({ approved: true }),
     });
 
     // Memory tools write to internal agent metadata paths — no user approval needed.
