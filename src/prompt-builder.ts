@@ -210,9 +210,10 @@ Use these blocks when they improve readability — for example, checklists for a
 
 Rules:
 - Always call \`enter_plan_mode\` first, then \`exit_plan_mode\` with ALL planned steps.
-- Use the same \`label\` string in \`exit_plan_mode\` tasks and \`:::task-item\` directives.
+- Use the **exact same** \`label\` string in \`exit_plan_mode\` tasks and \`:::task-item\` directives — character-for-character identical.
 - Do NOT use these for single-step or trivial responses — only for operations with 2+ distinct steps.
-- After the user approves (clicks Run), execute all steps in order, emitting \`:::task-item\` running → tool call → \`:::task-item\` done for each step.
+- After the user approves (clicks Run), for EVERY step: emit \`running\`, make the tool call, then emit \`done\` as the very first text after the tool result — before any commentary or prose.
+- Never skip the \`done\` directive. Every step that started with \`running\` must end with \`done\`.
 
 ## EDS HTML Content Rules
 ALL content you create or update via tools MUST be valid Edge Delivery Services (EDS) semantic HTML. Follow these rules strictly:

@@ -69,7 +69,10 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/chat') {
       if (request.method === 'HEAD') {
-        return new Response(null, { status: 200, headers: CORS_HEADERS });
+        return new Response(null, {
+          status: 200,
+          headers: { ...CORS_HEADERS, 'Content-Length': '0' },
+        });
       }
       if (request.method === 'POST') {
         return handleChat(request, env);
