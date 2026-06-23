@@ -1,3 +1,10 @@
+## [1.24.4](https://github.com/adobe-rnd/da-agent/compare/v1.24.3...v1.24.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* remove aem.page from allowlist ([753b751](https://github.com/adobe-rnd/da-agent/commit/753b75125e3f76c197b093943d02fc0f2e1d134e))
+
 ## [1.24.3](https://github.com/adobe-rnd/da-agent/compare/v1.24.2...v1.24.3) (2026-06-11)
 
 
