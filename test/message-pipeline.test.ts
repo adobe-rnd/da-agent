@@ -103,6 +103,26 @@ describe('expandUserSelectionContextForModel', () => {
     const result = expandUserSelectionContextForModel(messages);
     expect(result[0].content).toContain('Prose section');
   });
+
+  it('formats text-type selections with innerHTML', () => {
+    const messages = [
+      {
+        role: 'user',
+        content: 'Rewrite',
+        selectionContext: [
+          {
+            type: 'text',
+            proseIndex: 5,
+            innerHTML: '<p>world</p><p>Foo</p>',
+          },
+        ],
+      },
+    ];
+    const result = expandUserSelectionContextForModel(messages);
+    expect(result[0].content).toContain('Text selection');
+    expect(result[0].content).toContain('<p>world</p><p>Foo</p>');
+    expect(result[0].content).not.toContain('Prose section');
+  });
 });
 
 describe('expandLatestUserAttachmentsForModel', () => {
