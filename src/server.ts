@@ -18,6 +18,7 @@ import {
 } from './request-schemas.js';
 import { CORS_HEADERS, DA_OAUTH_CLIENT_ID, extractImsUserId } from './auth.js';
 import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
+import { resolveMcpFetcher } from './mcp/service-bindings.js';
 import {
   resolveApprovals,
   stripClientOnlyToolInputs,
@@ -131,9 +132,11 @@ async function handleMcpToolsList(request: Request, env: Env): Promise<Response>
         mergedHeaders['x-api-key'] = DA_OAUTH_CLIENT_ID;
       }
 
+      const fetcher = resolveMcpFetcher(serverUrl, env);
       const client = new MCPClient(serverUrl, {
         timeout: 10000,
         ...(Object.keys(mergedHeaders).length > 0 ? { headers: mergedHeaders } : {}),
+        ...(fetcher ? { fetcher } : {}),
       });
       try {
         await client.initialize();
