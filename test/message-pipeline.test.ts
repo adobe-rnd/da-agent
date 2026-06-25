@@ -123,6 +123,44 @@ describe('expandUserSelectionContextForModel', () => {
     expect(result[0].content).toContain('<p>world</p><p>Foo</p>');
     expect(result[0].content).not.toContain('Prose section');
   });
+
+  it('labels file items correctly without editor index', () => {
+    const messages = [
+      {
+        role: 'user',
+        content: 'What is this?',
+        selectionContext: [
+          {
+            type: 'file',
+            blockName: 'my-page',
+            innerText: 'Selected repository path: org/site/my-page',
+          },
+        ],
+      },
+    ];
+    const result = expandUserSelectionContextForModel(messages);
+    expect(result[0].content).toContain('File "my-page"');
+    expect(result[0].content).not.toContain('editor index');
+  });
+
+  it('labels folder items correctly without editor index', () => {
+    const messages = [
+      {
+        role: 'user',
+        content: 'List contents',
+        selectionContext: [
+          {
+            type: 'folder',
+            blockName: 'articles',
+            innerText: 'Selected repository path: org/site/articles',
+          },
+        ],
+      },
+    ];
+    const result = expandUserSelectionContextForModel(messages);
+    expect(result[0].content).toContain('Folder "articles"');
+    expect(result[0].content).not.toContain('editor index');
+  });
 });
 
 describe('expandLatestUserAttachmentsForModel', () => {
