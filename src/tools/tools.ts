@@ -597,6 +597,44 @@ export function createDATools(
       execute: async () => ({ approved: true }),
     });
 
+    // run_preflight: LLM-evaluated readiness check. Agent calls this after generating content,
+    // scoring it across categories (context, SEO, accessibility, etc.) before the user approves
+    // publication. needsApproval surfaces the structured result as a preflight card in the UI.
+    tools.run_preflight = tool({
+      description:
+        'Run a preflight readiness check on the generated content before publishing. ' +
+        'Evaluate the content across the provided categories and score each check as passed or failed. ' +
+        'Call this after content generation is complete and before any publish step. ' +
+        'The user will see the preflight card and must approve before proceeding.',
+      inputSchema: z.object({
+        title: z.string().describe('Document or page title being checked (≤ 10 words)'),
+        readiness: z
+          .number()
+          .int()
+          .min(0)
+          .max(100)
+          .describe('Overall readiness percentage (0–100)'),
+        categories: z
+          .array(
+            z.object({
+              name: z.string().describe('Category name, e.g. "Context", "SEO", "Accessibility"'),
+              checks: z
+                .array(
+                  z.object({
+                    label: z.string().describe('Short check description'),
+                    passed: z.boolean().describe('Whether this check passed'),
+                  }),
+                )
+                .describe('Individual checks within this category'),
+            }),
+          )
+          .describe('Ordered list of categories with their checks and results'),
+        summary: z.string().optional().describe('One-sentence overall assessment'),
+      }),
+      needsApproval: async () => true,
+      execute: async () => ({ approved: true }),
+    });
+
     // Memory tools write to internal agent metadata paths — no user approval needed.
     tools.write_project_memory = tool({
       description:

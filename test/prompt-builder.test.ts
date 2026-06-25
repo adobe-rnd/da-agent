@@ -251,3 +251,34 @@ describe('buildSystemPrompt with project memory', () => {
     expect(prompt).not.toContain('Project Memory');
   });
 });
+
+describe('buildSystemPrompt preflight instructions', () => {
+  it('includes run_preflight in planning instructions', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('run_preflight');
+  });
+
+  it('scopes preflight to HTML page documents only', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('.html');
+  });
+
+  it('explicitly excludes image uploads from preflight', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('image uploads');
+  });
+
+  it('instructs agent not to re-enter plan mode for preflight', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('enter_plan_mode');
+    // The instruction must say NOT to call enter_plan_mode for preflight
+    const preflightSection = prompt.slice(prompt.indexOf('Preflight'));
+    expect(preflightSection).toContain('do NOT call');
+  });
+
+  it('instructs agent to use content already in context, not re-read', () => {
+    const prompt = buildSystemPrompt();
+    const preflightSection = prompt.slice(prompt.indexOf('Preflight'));
+    expect(preflightSection).toContain('Do NOT re-read');
+  });
+});

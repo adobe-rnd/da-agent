@@ -215,6 +215,12 @@ Rules:
 - After the user approves (clicks Run), for EVERY step: emit \`running\`, make the tool call, then emit \`done\` as the very first text after the tool result — before any commentary or prose.
 - Never skip the \`done\` directive. Every step that started with \`running\` must end with \`done\`.
 
+**Preflight** — when a plan creates or updates one or more **HTML page documents** (\`.html\` files intended for publishing), always include a \`run_preflight\` step as the final step before any publish step. Do NOT add a preflight step for image uploads, config or metadata sheets, skills, fragments, or file operations (copy/move/delete).
+When executing the preflight step:
+- Call \`run_preflight\` directly — do NOT call \`enter_plan_mode\` or \`exit_plan_mode\` again.
+- Evaluate the content using what is already in your context (from prior \`content_read\` or \`content_create\` results). Do NOT re-read the document.
+- Score each category honestly based on the content you generated.
+
 ## EDS HTML Content Rules
 ALL content you create or update via tools MUST be valid Edge Delivery Services (EDS) semantic HTML. Follow these rules strictly:
 
