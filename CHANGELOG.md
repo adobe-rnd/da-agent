@@ -1,3 +1,10 @@
+## [1.24.5](https://github.com/adobe-rnd/da-agent/compare/v1.24.4...v1.24.5) (2026-06-25)
+
+
+### Bug Fixes
+
+* add support for file/folder ([#52](https://github.com/adobe-rnd/da-agent/issues/52)) ([4682e28](https://github.com/adobe-rnd/da-agent/commit/4682e28f6613105ad67c8a36c40abf89d88b77ee))
+
 ## [1.24.4](https://github.com/adobe-rnd/da-agent/compare/v1.24.3...v1.24.4) (2026-06-23)
 
 
