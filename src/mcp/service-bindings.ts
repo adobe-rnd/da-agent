@@ -11,6 +11,8 @@
  * points at the corresponding worker. The binding is per-environment in
  * wrangler.toml, so the same logical binding resolves to the CI worker in CI
  * and the production worker in production.
+ * TODO: This is temporary and for experimental purposes. We need to find
+ * a better solution to allow da-agent to talk to other Adobe workers.
  */
 
 interface ServiceBindingRoute {
