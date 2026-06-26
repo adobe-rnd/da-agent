@@ -93,6 +93,42 @@ describe('MCPClient', () => {
     });
   });
 
+  describe('custom fetcher (service binding)', () => {
+    it('routes requests through the provided fetcher instead of global fetch', async () => {
+      const bindingFetch = vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                protocolVersion: '2025-03-26',
+                capabilities: {},
+                serverInfo: { name: 'bound' },
+              },
+            },
+            { 'Mcp-Session-Id': 'bound-session' },
+          ),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 202 }));
+      const fetcher = { fetch: bindingFetch } as unknown as Fetcher;
+
+      const client = new MCPClient('https://aem-agentic-plugins-ci.adobeaem.workers.dev/mcp', {
+        fetcher,
+      });
+      await client.initialize();
+
+      expect(client.isInitialized).toBe(true);
+      expect(bindingFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).not.toHaveBeenCalled();
+      // URL is preserved so the bound worker routes on the same path.
+      expect(bindingFetch.mock.calls[0][0]).toBe(
+        'https://aem-agentic-plugins-ci.adobeaem.workers.dev/mcp',
+      );
+    });
+  });
+
   describe('listTools', () => {
     it('returns tool definitions', async () => {
       mockFetch

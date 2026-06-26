@@ -21,6 +21,7 @@ name = "da-agent-ci"
 services = [
   { binding = "DAADMIN", service = "da-admin-stage" },
   { binding = "DACOLLAB", service = "da-collab-stage" },
+  { binding = "AEM_AGENTIC_PLUGINS", service = "aem-agentic-plugins-ci" },
 ]
 
 [env.ci.vars]
@@ -41,6 +42,7 @@ name = "da-agent"
 services = [
   { binding = "DAADMIN", service = "da-admin" },
   { binding = "DACOLLAB", service = "da-collab" },
+  { binding = "AEM_AGENTIC_PLUGINS", service = "aem-agentic-plugins" },
 ]
 
 [env.production.vars]

@@ -14,6 +14,7 @@ import { normalizeMcpHeadersInput } from './request-schemas.js';
 import { DA_OAUTH_CLIENT_ID } from './auth.js';
 import { getBuiltInMcpServers } from './mcp/built-in-servers.js';
 import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
+import { resolveMcpFetcher } from './mcp/service-bindings.js';
 import type { EarlyChatContext } from './chat-context.js';
 import type { CollabClient } from './collab-client.js';
 
@@ -126,7 +127,9 @@ export async function assembleTools(
   let mcpErrors: MCPConnectionError[] = [];
   if (mcpConfig && Object.keys(mcpConfig.mcpServers).length > 0) {
     try {
-      const mcpResult = await connectAndRegisterMCPTools(mcpConfig);
+      const mcpResult = await connectAndRegisterMCPTools(mcpConfig, {
+        resolveFetcher: (url) => resolveMcpFetcher(url, env),
+      });
       mcpTools = mcpResult.tools;
       mcpClients = mcpResult.clients;
       mcpErrors = mcpResult.errors;
