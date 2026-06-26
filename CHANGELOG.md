@@ -1,3 +1,10 @@
+## [1.24.6](https://github.com/adobe-rnd/da-agent/compare/v1.24.5...v1.24.6) (2026-06-26)
+
+
+### Bug Fixes
+
+* **mcp:** route same-account workers.dev MCP servers via service binding ([1428d74](https://github.com/adobe-rnd/da-agent/commit/1428d7438630210773ea3ee23a34a3733f0ee931))
+
 ## [1.24.5](https://github.com/adobe-rnd/da-agent/compare/v1.24.4...v1.24.5) (2026-06-25)
 
 
