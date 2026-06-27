@@ -17,6 +17,12 @@ export interface SkillSummary {
   id: string;
   /** Display text shown in the agent's system prompt (title or description). */
   title: string;
+  /**
+   * Present only when the skill carries a script.js and execution frontmatter.
+   * Absent for prose-only skills. The agent reads/indexes this; it does NOT
+   * execute scripts — da-nx runs them in a web worker.
+   */
+  execution?: import('./frontmatter.js').SkillExecutionMeta;
 }
 
 export interface SkillsIndex {

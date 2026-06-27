@@ -164,4 +164,58 @@ status: approved
   it('does not throw on empty string', () => {
     expect(() => parseSkillIndexEntry('')).not.toThrow();
   });
+
+  it('parses execution_* fields into a structured execution object', () => {
+    const md = `---
+name: convert-tables
+description: Convert HTML tables
+version: 1
+status: approved
+execution_entry: convert
+execution_runtimes: js
+execution_capabilities:
+execution_timeout_ms: 5000
+---
+# Convert Tables`;
+    const entry = parseSkillIndexEntry(md);
+    expect(entry.execution).toEqual({
+      entry: 'convert',
+      runtimes: ['js'],
+      capabilities: [],
+      timeoutMs: 5000,
+    });
+  });
+
+  it('yields execution: undefined when execution_entry is absent (backwards-compat)', () => {
+    const md = `---\nname: prose-skill\ndescription: A prose skill\nversion: 1\n---\n# Body`;
+    const entry = parseSkillIndexEntry(md);
+    expect(entry.execution).toBeUndefined();
+  });
+
+  it('parses multiple runtimes and capabilities', () => {
+    const md = `---
+name: multi-runtime
+description: Multi-runtime skill
+version: 1
+execution_entry: run
+execution_runtimes: js, wasm
+execution_capabilities: dom, fetch
+execution_timeout_ms: 10000
+---`;
+    const entry = parseSkillIndexEntry(md);
+    expect(entry.execution?.runtimes).toEqual(['js', 'wasm']);
+    expect(entry.execution?.capabilities).toEqual(['dom', 'fetch']);
+  });
+
+  it('defaults timeout to 5000 when execution_timeout_ms is absent', () => {
+    const md = `---\nname: x\ndescription: y\nversion: 1\nexecution_entry: run\nexecution_runtimes: js\n---\n`;
+    const entry = parseSkillIndexEntry(md);
+    expect(entry.execution?.timeoutMs).toBe(5000);
+  });
+
+  it('defaults timeout to 5000 when execution_timeout_ms is non-numeric', () => {
+    const md = `---\nname: x\ndescription: y\nversion: 1\nexecution_entry: run\nexecution_timeout_ms: bad\n---\n`;
+    const entry = parseSkillIndexEntry(md);
+    expect(entry.execution?.timeoutMs).toBe(5000);
+  });
 });

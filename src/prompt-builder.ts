@@ -42,12 +42,26 @@ function buildMCPPromptSection(
 
 function buildSkillsPromptSection(skillsIndex?: SkillsIndex | null): string {
   if (!skillsIndex || skillsIndex.skills.length === 0) return '';
-  const lines = skillsIndex.skills.map((s) => `- **${s.id}**: ${s.title}`).join('\n');
-  return `\n\n## Available Skills
-The following skills are available for this site. Use the \`da_read_skill\` tool to load a skill's full instructions before applying it.
-${lines}
 
-Skills may reference MCP tools by name. When applying a skill, read its full content first using \`da_read_skill\`, then follow its instructions precisely.`;
+  const proseSkills = skillsIndex.skills.filter((s) => !s.execution);
+  const scriptSkills = skillsIndex.skills.filter((s) => !!s.execution);
+
+  let section = '\n\n## Available Skills\nThe following skills are available for this site.';
+
+  if (proseSkills.length > 0) {
+    const lines = proseSkills.map((s) => `- **${s.id}**: ${s.title}`).join('\n');
+    section += `\n\n### Prose Skills\nUse the \`da_read_skill\` tool to load a skill's full instructions before applying it.\n${lines}`;
+  }
+
+  if (scriptSkills.length > 0) {
+    const lines = scriptSkills.map((s) => `- **${s.id}**: ${s.title}`).join('\n');
+    section += `\n\n### Script-Runnable Skills\nThese skills carry executable scripts that run in da-nx. To invoke one, call the \`skill_run_script\` tool with \`{ skillId, input }\` where \`input\` matches the shape documented in the skill's instructions. Do NOT include capabilities or execution metadata in the call — the client resolves those independently.\n${lines}`;
+  }
+
+  section +=
+    '\n\nSkills may reference MCP tools by name. When applying a prose skill, read its full content first using `da_read_skill`, then follow its instructions precisely.';
+
+  return section;
 }
 
 function buildAgentPromptSection(

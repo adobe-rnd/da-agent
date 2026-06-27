@@ -83,6 +83,21 @@ export function stripFrontmatter(markdown: string): string {
   return lines.slice(1).join('\n');
 }
 
+/** Execution metadata parsed from flat `execution_*` frontmatter fields. */
+export interface SkillExecutionMeta {
+  /** The script entry-point identifier (e.g. `"convert"`). */
+  entry: string;
+  /** Supported runtime identifiers (e.g. `["js"]`). */
+  runtimes: string[];
+  /**
+   * Required client capabilities. Empty array means the skill is
+   * client-eligible with no extra capability requirements.
+   */
+  capabilities: string[];
+  /** Execution timeout in milliseconds. */
+  timeoutMs: number;
+}
+
 export interface SkillIndexEntry {
   /** Frontmatter `name` value, or empty string when absent. */
   name: string;
@@ -92,6 +107,20 @@ export interface SkillIndexEntry {
   version: number;
   /** Defaults to `'approved'` when the field is absent or unrecognised. */
   status: 'approved' | 'draft';
+  /**
+   * Present only when the skill carries execution metadata
+   * (`execution_entry` frontmatter field). Absent for prose-only skills.
+   */
+  execution?: SkillExecutionMeta;
+}
+
+/** Parse a comma-separated list field into a trimmed, non-empty string array. */
+function parseCommaSeparated(raw: string | undefined): string[] {
+  if (!raw || !raw.trim()) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -103,10 +132,25 @@ export function parseSkillIndexEntry(markdown: string): SkillIndexEntry {
   const rawVersion = parseInt(fields.version ?? '', 10);
   const version = Number.isFinite(rawVersion) && rawVersion > 0 ? rawVersion : 0;
   const status = (fields.status ?? '').trim().toLowerCase() === 'draft' ? 'draft' : 'approved';
-  return {
+
+  const entry: SkillIndexEntry = {
     name: (fields.name ?? '').trim(),
     description: (fields.description ?? '').trim(),
     version,
     status,
   };
+
+  const executionEntry = (fields.execution_entry ?? '').trim();
+  if (executionEntry) {
+    const rawTimeout = parseInt(fields.execution_timeout_ms ?? '', 10);
+    const timeoutMs = Number.isFinite(rawTimeout) && rawTimeout > 0 ? rawTimeout : 5000;
+    entry.execution = {
+      entry: executionEntry,
+      runtimes: parseCommaSeparated(fields.execution_runtimes),
+      capabilities: parseCommaSeparated(fields.execution_capabilities),
+      timeoutMs,
+    };
+  }
+
+  return entry;
 }

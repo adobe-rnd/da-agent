@@ -14,11 +14,16 @@ import type { DAAdminClient } from '../../src/da-admin/client.js';
 const SKILL_MD = (name: string, description: string, version = 1, status = 'approved') =>
   `---\nname: ${name}\ndescription: ${description}\nversion: ${version}\nstatus: ${status}\n---\n# ${name}\n\nBody text for ${name}.`;
 
+const SCRIPT_SKILL_MD = (name: string, description: string, version = 1, status = 'approved') =>
+  `---\nname: ${name}\ndescription: ${description}\nversion: ${version}\nstatus: ${status}\nexecution_entry: convert\nexecution_runtimes: js\nexecution_capabilities: \nexecution_timeout_ms: 5000\n---\n# ${name}\n\nBody text for ${name}.`;
+
 const BODY_ONLY = (name: string) => `# ${name}\n\nBody text for ${name}.`;
 
 type ClientOpts = {
   listResponse?: unknown;
   listError?: { status: number };
+  /** path → raw list response (array) OR source content (string/object) */
+  listByPath?: Record<string, unknown>;
   /** path → raw response (string for .md, object for JSON) */
   sourceByPath?: Record<string, unknown>;
   /** config sheet skills data for legacy fallback */
@@ -27,7 +32,10 @@ type ClientOpts = {
 
 function mockClient(opts: ClientOpts = {}): DAAdminClient {
   return {
-    listSources: async (_org: string, _site: string, _path: string) => {
+    listSources: async (_org: string, _site: string, path: string) => {
+      if (opts.listByPath && path in opts.listByPath) {
+        return opts.listByPath[path] as ReturnType<DAAdminClient['listSources']>;
+      }
       if (opts.listError) throw opts.listError;
       return opts.listResponse ?? [];
     },
@@ -313,6 +321,79 @@ describe('loadSkillBodyFromFolder (legacy fallback disabled)', () => {
 // ---------------------------------------------------------------------------
 // loadSkillBodyFromFolder
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Script-carrying skills
+// ---------------------------------------------------------------------------
+
+describe('loadSkillsIndexFromFolders — script-carrying skills', () => {
+  it('populates execution on SkillSummary when skill has execution frontmatter and script.js', async () => {
+    const client = mockClient({
+      listByPath: {
+        // top-level folder listing
+        '.da/skills': [{ name: 'convert-tables', path: '/.da/skills/convert-tables' }],
+        // sub-folder listing for the skill
+        '.da/skills/convert-tables': [
+          { name: 'skill', ext: '.md', path: '/.da/skills/convert-tables/skill.md' },
+          { name: 'script', ext: '.js', path: '/.da/skills/convert-tables/script.js' },
+        ],
+      },
+      sourceByPath: {
+        '.da/skills/convert-tables/skill.md': SCRIPT_SKILL_MD(
+          'convert-tables',
+          'Convert HTML tables to Markdown',
+        ),
+      },
+    });
+
+    const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
+    expect(index.source).toBe('folder');
+    expect(index.skills).toHaveLength(1);
+    const skill = index.skills[0]!;
+    expect(skill.id).toBe('convert-tables');
+    expect(skill.execution).toEqual({
+      entry: 'convert',
+      runtimes: ['js'],
+      capabilities: [],
+      timeoutMs: 5000,
+    });
+  });
+
+  it('does not populate execution when script.js is absent even if frontmatter present', async () => {
+    const client = mockClient({
+      listByPath: {
+        '.da/skills': [{ name: 'convert-tables', path: '/.da/skills/convert-tables' }],
+        // skill folder has no script.js
+        '.da/skills/convert-tables': [
+          { name: 'skill', ext: '.md', path: '/.da/skills/convert-tables/skill.md' },
+        ],
+      },
+      sourceByPath: {
+        '.da/skills/convert-tables/skill.md': SCRIPT_SKILL_MD(
+          'convert-tables',
+          'Convert HTML tables',
+        ),
+      },
+    });
+
+    const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
+    expect(index.skills[0]?.execution).toBeUndefined();
+  });
+
+  it('leaves execution undefined for prose-only skills', async () => {
+    const client = mockClient({
+      listByPath: {
+        '.da/skills': [{ name: 'brand-voice', path: '/.da/skills/brand-voice' }],
+      },
+      sourceByPath: {
+        '.da/skills/brand-voice/skill.md': SKILL_MD('brand-voice', 'Enforce brand tone'),
+      },
+    });
+
+    const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
+    expect(index.skills[0]?.execution).toBeUndefined();
+  });
+});
 
 describe('loadSkillBodyFromFolder', () => {
   it('reads folder skill and strips frontmatter', async () => {
