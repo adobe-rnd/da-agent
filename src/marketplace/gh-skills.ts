@@ -22,9 +22,11 @@ import type { SkillSummary, SkillsIndex } from '../skills/loader.js';
 const MARKETPLACE_OWNER = 'exp-workspace';
 const MARKETPLACE_REPO = 'skills';
 const MARKETPLACE_BRANCH = 'main';
+// TODO: update to 'skills' (root) once migrated to adobe/skills
+const MARKETPLACE_PATH = 'ew';
 
-const GH_CONTENTS_URL = `https://api.github.com/repos/${MARKETPLACE_OWNER}/${MARKETPLACE_REPO}/contents/?ref=${MARKETPLACE_BRANCH}`;
-const RAW_BASE_URL = `https://raw.githubusercontent.com/${MARKETPLACE_OWNER}/${MARKETPLACE_REPO}/${MARKETPLACE_BRANCH}`;
+const GH_CONTENTS_URL = `https://api.github.com/repos/${MARKETPLACE_OWNER}/${MARKETPLACE_REPO}/contents/${MARKETPLACE_PATH}?ref=${MARKETPLACE_BRANCH}`;
+const RAW_BASE_URL = `https://raw.githubusercontent.com/${MARKETPLACE_OWNER}/${MARKETPLACE_REPO}/${MARKETPLACE_BRANCH}/${MARKETPLACE_PATH}`;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -91,7 +93,7 @@ async function hasMarketplaceScript(
   if (!entry || runtimes.length === 0) return false;
   const ext = runtimeToExt(runtimes[0]);
   const expectedFile = `${entry}${ext}`;
-  const url = `https://api.github.com/repos/${MARKETPLACE_OWNER}/${MARKETPLACE_REPO}/contents/${id}/scripts?ref=${MARKETPLACE_BRANCH}`;
+  const url = `https://api.github.com/repos/${MARKETPLACE_OWNER}/${MARKETPLACE_REPO}/contents/${MARKETPLACE_PATH}/${id}/scripts?ref=${MARKETPLACE_BRANCH}`;
   const result = await fetchJson<GHContentsEntry[]>(url);
   if ('error' in result) return false;
   return result.data.some((e) => e.name === expectedFile && e.type === 'file');

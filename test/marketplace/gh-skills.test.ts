@@ -47,12 +47,13 @@ function mockFetch(map: FetchMap) {
 const OWNER = 'exp-workspace';
 const REPO = 'skills';
 const BRANCH = 'main';
-const CONTENTS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/contents/?ref=${BRANCH}`;
+const NS = 'ew';
+const CONTENTS_URL = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${NS}?ref=${BRANCH}`;
 const rawUrl = (id: string, file: string) =>
-  `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${id}/${file}`;
+  `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${NS}/${id}/${file}`;
 /** URL used by the adapter to list a skill's `scripts/` sub-folder. */
 const scriptsUrl = (id: string) =>
-  `https://api.github.com/repos/${OWNER}/${REPO}/contents/${id}/scripts?ref=${BRANCH}`;
+  `https://api.github.com/repos/${OWNER}/${REPO}/contents/${NS}/${id}/scripts?ref=${BRANCH}`;
 
 // ---------------------------------------------------------------------------
 // Tests
