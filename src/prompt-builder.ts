@@ -55,7 +55,7 @@ function buildSkillsPromptSection(skillsIndex?: SkillsIndex | null): string {
 
   if (scriptSkills.length > 0) {
     const lines = scriptSkills.map((s) => `- **${s.id}**: ${s.title}`).join('\n');
-    section += `\n\n### Script-Runnable Skills\nThese skills carry executable scripts that run in da-nx. To invoke one, call the \`skill_run_script\` tool with \`{ skillId, input }\` where \`input\` matches the shape documented in the skill's instructions. Do NOT include capabilities or execution metadata in the call — the client resolves those independently.\n${lines}`;
+    section += `\n\n### Script-Runnable Skills\nThese skills carry executable scripts that run in da-nx. To invoke one, call the \`skill_run_script\` tool with \`{ skillId, input }\` where \`input\` matches the shape documented in the skill's instructions. Do NOT include capabilities or execution metadata in the call — the client resolves those independently.\n\nWhen a script-skill needs an attached file as input, pass \`input: { attachmentRef: "<id>" }\` (plus any other params the skill documents), where \`<id>\` is the attachment id shown in the attached files list (e.g. \`[abc123]\` → \`"abc123"\`). Do NOT put file bytes or base64 data in the arguments — the client resolves the reference to the file contents.\n${lines}`;
   }
 
   section +=
