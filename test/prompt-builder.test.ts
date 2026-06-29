@@ -14,6 +14,14 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('NEVER output raw HTML');
   });
 
+  it('includes error communication guidance (no internal details)', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('Never expose internal');
+    expect(prompt).toContain('HTTP status codes');
+    expect(prompt).toContain('stack traces');
+    expect(prompt).toContain('retry as needed without narrating it');
+  });
+
   it('includes EDS HTML rules', () => {
     const prompt = buildSystemPrompt();
     expect(prompt).toContain('<body>');
