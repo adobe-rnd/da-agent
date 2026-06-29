@@ -20,7 +20,6 @@ import type { SkillsIndex, SkillSummary } from './loader.js';
 
 export const SKILLS_FOLDER_BASE = '.da/skills';
 export const SKILL_BODY_FILENAME = 'skill.md';
-export const SKILL_SCRIPT_FILENAME = 'script.js';
 
 /**
  * Master switch for the legacy config-sheet fallback.
@@ -95,30 +94,6 @@ function buildBodyPath(id: string): string {
   return `${SKILLS_FOLDER_BASE}/${id}/${SKILL_BODY_FILENAME}`;
 }
 
-function buildSkillFolderPath(id: string): string {
-  return `${SKILLS_FOLDER_BASE}/${id}`;
-}
-
-/**
- * Returns true when `script.js` is present in the skill's folder.
- * Uses a folder listing (one extra request per script-carrying skill) to
- * avoid fetching the script body unnecessarily.
- */
-async function hasSkillScript(
-  client: DAAdminClient,
-  org: string,
-  site: string,
-  id: string,
-): Promise<boolean> {
-  try {
-    const items = await client.listSources(org, site, buildSkillFolderPath(id));
-    if (!Array.isArray(items)) return false;
-    return items.some((item) => item.name === 'script' && item.ext === '.js');
-  } catch {
-    return false;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Index loader
 // ---------------------------------------------------------------------------
@@ -168,17 +143,10 @@ export async function loadSkillsIndexFromFolders(
         const indexed = parseSkillIndexEntry(raw);
         if (indexed.status === 'draft') return null;
         const description = indexed.description || indexed.name || entry.name;
+        // .da/skills is user-writable site content — prose only. script.js
+        // siblings are intentionally ignored here. Script-carrying skills come
+        // exclusively from the curated GH marketplace (see src/marketplace/).
         const summary: SkillSummary = { id: entry.name, title: description };
-
-        // A skill is script-carrying iff execution_entry is present AND a
-        // script.js sibling exists. List the skill folder to confirm.
-        if (indexed.execution) {
-          const hasScript = await hasSkillScript(client, org, site, entry.name);
-          if (hasScript) {
-            summary.execution = indexed.execution;
-          }
-        }
-
         return summary;
       } catch (err) {
         warn('getSource failed for skill.md', { id: entry.name, path, err });

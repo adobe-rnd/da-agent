@@ -183,7 +183,46 @@ execution_timeout_ms: 5000
       runtimes: ['js'],
       capabilities: [],
       timeoutMs: 5000,
+      dependencies: [],
     });
+  });
+
+  it('parses execution_dependencies into a string array', () => {
+    const md = `---
+name: compress-skill
+description: Compress output
+version: 1
+execution_entry: compress
+execution_runtimes: js
+execution_dependencies: fflate
+---`;
+    const entry = parseSkillIndexEntry(md);
+    expect(entry.execution?.dependencies).toEqual(['fflate']);
+  });
+
+  it('parses multiple execution_dependencies', () => {
+    const md = `---
+name: multi-dep
+description: Multiple deps
+version: 1
+execution_entry: run
+execution_runtimes: js
+execution_dependencies: fflate, lodash, uuid
+---`;
+    const entry = parseSkillIndexEntry(md);
+    expect(entry.execution?.dependencies).toEqual(['fflate', 'lodash', 'uuid']);
+  });
+
+  it('sets dependencies to empty array when execution_dependencies is absent', () => {
+    const md = `---
+name: no-deps
+description: No deps
+version: 1
+execution_entry: run
+execution_runtimes: js
+---`;
+    const entry = parseSkillIndexEntry(md);
+    expect(entry.execution?.dependencies).toEqual([]);
   });
 
   it('yields execution: undefined when execution_entry is absent (backwards-compat)', () => {
@@ -205,6 +244,7 @@ execution_timeout_ms: 10000
     const entry = parseSkillIndexEntry(md);
     expect(entry.execution?.runtimes).toEqual(['js', 'wasm']);
     expect(entry.execution?.capabilities).toEqual(['dom', 'fetch']);
+    expect(entry.execution?.dependencies).toEqual([]);
   });
 
   it('defaults timeout to 5000 when execution_timeout_ms is absent', () => {

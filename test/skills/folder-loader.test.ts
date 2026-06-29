@@ -323,16 +323,17 @@ describe('loadSkillBodyFromFolder (legacy fallback disabled)', () => {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Script-carrying skills
+// Prose-only enforcement (.da/skills must never carry execution metadata)
 // ---------------------------------------------------------------------------
 
-describe('loadSkillsIndexFromFolders — script-carrying skills', () => {
-  it('populates execution on SkillSummary when skill has execution frontmatter and script.js', async () => {
+describe('loadSkillsIndexFromFolders — prose-only enforcement', () => {
+  it('ignores script.js and never populates execution, even when execution frontmatter and script.js are both present', async () => {
+    // Security: .da/skills is user-writable site content. A script.js there
+    // must be ignored so no user can ship code that runs in other browsers.
+    // Script-carrying skills come exclusively from the curated GH marketplace.
     const client = mockClient({
       listByPath: {
-        // top-level folder listing
         '.da/skills': [{ name: 'convert-tables', path: '/.da/skills/convert-tables' }],
-        // sub-folder listing for the skill
         '.da/skills/convert-tables': [
           { name: 'skill', ext: '.md', path: '/.da/skills/convert-tables/skill.md' },
           { name: 'script', ext: '.js', path: '/.da/skills/convert-tables/script.js' },
@@ -351,19 +352,14 @@ describe('loadSkillsIndexFromFolders — script-carrying skills', () => {
     expect(index.skills).toHaveLength(1);
     const skill = index.skills[0]!;
     expect(skill.id).toBe('convert-tables');
-    expect(skill.execution).toEqual({
-      entry: 'convert',
-      runtimes: ['js'],
-      capabilities: [],
-      timeoutMs: 5000,
-    });
+    // execution must be absent regardless of frontmatter or script.js sibling
+    expect(skill.execution).toBeUndefined();
   });
 
-  it('does not populate execution when script.js is absent even if frontmatter present', async () => {
+  it('leaves execution undefined when execution frontmatter present but no script.js', async () => {
     const client = mockClient({
       listByPath: {
         '.da/skills': [{ name: 'convert-tables', path: '/.da/skills/convert-tables' }],
-        // skill folder has no script.js
         '.da/skills/convert-tables': [
           { name: 'skill', ext: '.md', path: '/.da/skills/convert-tables/skill.md' },
         ],
@@ -380,7 +376,7 @@ describe('loadSkillsIndexFromFolders — script-carrying skills', () => {
     expect(index.skills[0]?.execution).toBeUndefined();
   });
 
-  it('leaves execution undefined for prose-only skills', async () => {
+  it('leaves execution undefined for prose-only skills (no execution frontmatter)', async () => {
     const client = mockClient({
       listByPath: {
         '.da/skills': [{ name: 'brand-voice', path: '/.da/skills/brand-voice' }],

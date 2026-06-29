@@ -21,8 +21,16 @@ export interface SkillSummary {
    * Present only when the skill carries a script.js and execution frontmatter.
    * Absent for prose-only skills. The agent reads/indexes this; it does NOT
    * execute scripts — da-nx runs them in a web worker.
+   *
+   * Only marketplace-sourced skills carry this field. `.da/skills/` skills
+   * are prose-only — `execution` is never set for folder skills.
    */
   execution?: import('./frontmatter.js').SkillExecutionMeta;
+  /**
+   * Present when the skill originates from the curated GH marketplace.
+   * Absent for local `.da/skills/` prose skills.
+   */
+  source?: 'marketplace';
 }
 
 export interface SkillsIndex {

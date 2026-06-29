@@ -96,6 +96,14 @@ export interface SkillExecutionMeta {
   capabilities: string[];
   /** Execution timeout in milliseconds. */
   timeoutMs: number;
+  /**
+   * npm package names the script requires (e.g. `["fflate"]`).
+   * Parsed from `execution_dependencies` (comma-separated).
+   * Empty array when the field is absent or empty.
+   * The agent carries this value as-is; dependency decisions are made by
+   * the client, not the agent.
+   */
+  dependencies: string[];
 }
 
 export interface SkillIndexEntry {
@@ -149,6 +157,7 @@ export function parseSkillIndexEntry(markdown: string): SkillIndexEntry {
       runtimes: parseCommaSeparated(fields.execution_runtimes),
       capabilities: parseCommaSeparated(fields.execution_capabilities),
       timeoutMs,
+      dependencies: parseCommaSeparated(fields.execution_dependencies),
     };
   }
 
