@@ -20,6 +20,7 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('HTTP status codes');
     expect(prompt).toContain('stack traces');
     expect(prompt).toContain('retry as needed without narrating it');
+    expect(prompt).toContain('Do NOT narrate your plan or intermediate progress');
   });
 
   it('includes EDS HTML rules', () => {
