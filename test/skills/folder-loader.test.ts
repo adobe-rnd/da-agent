@@ -451,4 +451,38 @@ describe('loadSkillBodyFromFolder', () => {
     const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'no-fm');
     expect(body).toContain('Body text for no-fm');
   });
+
+  it('returns null on non-404 getSource error and does not consult the sheet', async () => {
+    // A transient 5xx/network error must not cause stale sheet content to be served.
+    let configCalls = 0;
+    const base = mockClient({
+      configSkills: [{ key: 'my-skill', content: '# Stale\n\nOld content.' }],
+    });
+    // Override getSource to throw a 503 instead of a 404
+    const client = {
+      ...base,
+      getSource: async (_org: string, _site: string, _path: string) => {
+        throw Object.assign(new Error('service unavailable'), { status: 503 });
+      },
+      getSiteConfig: async (...args: Parameters<typeof base.getSiteConfig>) => {
+        configCalls += 1;
+        return base.getSiteConfig(...args);
+      },
+    } as typeof base;
+
+    const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'my-skill');
+    expect(body).toBeNull();
+    expect(configCalls).toBe(0);
+  });
+
+  it('falls back to sheet on explicit 404 (file genuinely absent)', async () => {
+    // A 404 means the folder skill does not exist; sheet fallback is correct.
+    const client = mockClient({
+      // no sourceByPath → getSource throws 404
+      configSkills: [{ key: 'sheet-only', content: '# Sheet\n\nSheet body.' }],
+    });
+
+    const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'sheet-only');
+    expect(body).toContain('Sheet body.');
+  });
 });
