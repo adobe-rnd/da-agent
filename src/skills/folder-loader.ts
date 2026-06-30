@@ -204,7 +204,12 @@ export async function loadSkillBodyFromFolder(
     const status = (err as { status?: number }).status ?? 0;
     if (status !== 404) {
       warn('getSource failed for skill body', { id, path, err });
+      // Non-404 error (e.g. 5xx / network failure): the file may exist but is
+      // temporarily unavailable.  Do NOT fall through to the legacy sheet —
+      // that would silently serve stale content when da-admin is degraded.
+      return null;
     }
+    // 404 → file genuinely absent; fall through to sheet fallback below.
   }
 
   if (_fallbackConfig.enabled) {
