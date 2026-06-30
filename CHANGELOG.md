@@ -1,3 +1,10 @@
+## [1.24.7](https://github.com/adobe-rnd/da-agent/compare/v1.24.6...v1.24.7) (2026-06-30)
+
+
+### Bug Fixes
+
+* **mcp:** bind global fetch to avoid Illegal invocation on remote MCP servers ([0cde01c](https://github.com/adobe-rnd/da-agent/commit/0cde01c557f7efb32d56c96b897e01bc504168e9))
+
 ## [1.24.6](https://github.com/adobe-rnd/da-agent/compare/v1.24.5...v1.24.6) (2026-06-26)
 
 
