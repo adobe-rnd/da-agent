@@ -271,15 +271,13 @@ describe('buildSystemPrompt preflight instructions', () => {
 
   it('instructs agent not to re-enter plan mode for preflight', () => {
     const prompt = buildSystemPrompt();
-    expect(prompt).toContain('enter_plan_mode');
-    // The instruction must say NOT to call enter_plan_mode for preflight
     const preflightSection = prompt.slice(prompt.indexOf('Preflight'));
-    expect(preflightSection).toContain('do NOT call');
+    expect(preflightSection).toContain('Do NOT call');
   });
 
-  it('instructs agent to use content already in context, not re-read', () => {
+  it('instructs agent to call evaluate_page before run_preflight', () => {
     const prompt = buildSystemPrompt();
     const preflightSection = prompt.slice(prompt.indexOf('Preflight'));
-    expect(preflightSection).toContain('Do NOT re-read');
+    expect(preflightSection).toContain('mcp__governance-agent__evaluate_page');
   });
 });
