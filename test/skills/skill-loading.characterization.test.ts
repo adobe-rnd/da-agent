@@ -230,13 +230,11 @@ describe('[characterization] loadSkillsIndexFromFolders — fallback disabled + 
 
 describe('[characterization] loadSkillBodyFromFolder — non-404 getSource error does NOT fall to sheet', () => {
   /**
-   * When getSource throws a non-404 error (e.g. 500), the function logs a warning
-   * and then proceeds to the fallback block (if enabled). This is a bug-characterization:
-   * a 500 from the DA admin is treated the same as a 404 for fallback purposes.
-   * NOTE: this is characterizing current behavior — a server error causing a silent
-   * sheet fallback may be unintentional.
+   * When getSource throws a non-404 error (e.g. 500), the function returns null
+   * immediately and does NOT fall through to the sheet fallback. A server error
+   * is a hard failure — silently serving stale sheet content would mask it.
    */
-  it('falls back to sheet on non-404 getSource error when fallback enabled (bug characterization)', async () => {
+  it('returns null on non-404 getSource error and does not consult sheet fallback', async () => {
     const client = mockFolderClient({
       sourceByPath: {
         // Simulate by overriding via custom client below
@@ -252,8 +250,8 @@ describe('[characterization] loadSkillBodyFromFolder — non-404 getSource error
     } as unknown as DAAdminClient;
 
     const body = await loadSkillBodyFromFolder(customClient, 'org', 'mysite', 'my-skill');
-    // Current behavior: non-404 errors fall through to sheet fallback
-    expect(body).toContain('Content.');
+    // Corrected behavior: non-404 errors return null; sheet is NOT consulted
+    expect(body).toBeNull();
   });
 });
 
