@@ -67,7 +67,13 @@ export class MCPClient {
     this.timeout = options?.timeout ?? 30000;
     this.callToolTimeout = options?.callToolTimeout ?? 60000;
     // Route through the service binding when provided, else the global fetch.
-    this.doFetch = options?.fetcher ? options.fetcher.fetch.bind(options.fetcher) : fetch;
+    // The global `fetch` must stay bound to the global scope: storing the bare
+    // reference and later calling it as `this.doFetch(...)` rebinds `this` to
+    // the MCPClient instance, which the runtime rejects with "Illegal
+    // invocation: function called with incorrect `this` reference".
+    this.doFetch = options?.fetcher
+      ? options.fetcher.fetch.bind(options.fetcher)
+      : fetch.bind(globalThis);
   }
 
   private buildRequest(method: string, params?: Record<string, unknown>): JsonRpcRequest {
