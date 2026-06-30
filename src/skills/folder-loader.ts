@@ -143,7 +143,11 @@ export async function loadSkillsIndexFromFolders(
         const indexed = parseSkillIndexEntry(raw);
         if (indexed.status === 'draft') return null;
         const description = indexed.description || indexed.name || entry.name;
-        return { id: entry.name, title: description } satisfies SkillSummary;
+        // .da/skills is user-writable site content — prose only. script.js
+        // siblings are intentionally ignored here. Script-carrying skills come
+        // exclusively from the curated GH marketplace (see src/marketplace/).
+        const summary: SkillSummary = { id: entry.name, title: description };
+        return summary;
       } catch (err) {
         warn('getSource failed for skill.md', { id: entry.name, path, err });
         return null;
