@@ -63,6 +63,8 @@ export async function assembleTools(
     getCollab: () => collabRef.promise,
     org: pageContext?.org,
     repo: pageContext?.site,
+    imsToken: imsToken ?? undefined,
+    governanceUrl: env.GOVERNANCE_AGENT_URL ?? undefined,
     resolveAttachmentByRef: (attachmentRef: string) => {
       const hit = attachmentMap.get(attachmentRef);
       if (!hit?.dataBase64) return null;

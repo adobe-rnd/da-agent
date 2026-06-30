@@ -49,6 +49,8 @@ export type DAToolsOptions = {
     mimeType: string;
     fileName: string;
   } | null;
+  imsToken?: string;
+  governanceUrl?: string;
 };
 
 async function resolveCollab(options?: DAToolsOptions): Promise<CollabClient | null> {
@@ -597,27 +599,33 @@ export function createDATools(
       execute: async () => ({ approved: true }),
     });
 
-    // run_preflight: LLM-evaluated readiness check. Agent calls this after generating content,
-    // scoring it across categories (context, SEO, accessibility, etc.) before the user approves
-    // publication. needsApproval surfaces the structured result as a preflight card in the UI.
+    // run_preflight: governance-evaluated readiness check. Calls the Brand Governance Agent's
+    // evaluate_page REST endpoint using the Live Preview URL, maps results to card schema, and
+    // surfaces the approval card. Falls back to LLM-provided payload if governance is unavailable.
     tools.run_preflight = tool({
       description:
         'Run a preflight readiness check on the generated content before publishing. ' +
-        'Evaluate the content across the provided categories and score each check as passed or failed. ' +
+        'Pass the Live Preview URL so the governance agent can evaluate it. ' +
         'Call this after content generation is complete and before any publish step. ' +
         'The user will see the preflight card and must approve before proceeding.',
       inputSchema: z.object({
         title: z.string().describe('Document or page title being checked (≤ 10 words)'),
+        url: z
+          .string()
+          .url()
+          .describe('Live Preview URL of the document — always reflects current state'),
         readiness: z
           .number()
           .int()
           .min(0)
           .max(100)
-          .describe('Overall readiness percentage (0–100)'),
+          .describe(
+            'Overall readiness percentage (0–100) — computed from governance results or estimated by the agent when governance is unavailable',
+          ),
         categories: z
           .array(
             z.object({
-              name: z.string().describe('Category name, e.g. "Context", "SEO", "Accessibility"'),
+              name: z.string().describe('Category name'),
               checks: z
                 .array(
                   z.object({
@@ -628,11 +636,61 @@ export function createDATools(
                 .describe('Individual checks within this category'),
             }),
           )
-          .describe('Ordered list of categories with their checks and results'),
+          .describe('Populated from governance results when available; otherwise agent-estimated'),
         summary: z.string().optional().describe('One-sentence overall assessment'),
       }),
       needsApproval: async () => true,
-      execute: async () => ({ approved: true }),
+      execute: async ({ url, title, summary }) => {
+        const { governanceUrl, imsToken } = opts ?? {};
+        if (!governanceUrl || !imsToken) return { approved: true };
+
+        try {
+          const resp = await fetch(`${governanceUrl}/api/v0/evaluate/page`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${imsToken}`,
+            },
+            body: JSON.stringify({ url }),
+          });
+
+          if (!resp.ok) return { approved: true };
+
+          const data = (await resp.json()) as {
+            success: boolean;
+            text_evaluation?: {
+              overall_aligned: boolean;
+              successful_checks: number;
+              failed_checks: number;
+              not_applicable_checks: number;
+              evaluations?: Array<{ check_title: string; alignment: string; reasoning?: string }>;
+            };
+          };
+
+          if (!data.success || !data.text_evaluation?.evaluations?.length) {
+            return { approved: true };
+          }
+
+          const evals = data.text_evaluation.evaluations;
+          const total = evals.length;
+          const passed = evals.filter((e) => e.alignment === 'YES' || e.alignment === 'NA').length;
+          const readiness = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+          const categories = [
+            {
+              name: 'Brand Governance',
+              checks: evals.map((e) => ({
+                label: e.check_title,
+                passed: e.alignment === 'YES' || e.alignment === 'NA',
+              })),
+            },
+          ];
+
+          return { approved: true, title, url, readiness, categories, summary };
+        } catch {
+          return { approved: true };
+        }
+      },
     });
 
     // Memory tools write to internal agent metadata paths — no user approval needed.

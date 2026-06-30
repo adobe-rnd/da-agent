@@ -258,9 +258,10 @@ describe('buildSystemPrompt preflight instructions', () => {
     expect(prompt).toContain('run_preflight');
   });
 
-  it('scopes preflight to HTML page documents only', () => {
+  it('makes preflight conditional on a configured skill', () => {
     const prompt = buildSystemPrompt();
-    expect(prompt).toContain('.html');
+    const preflightSection = prompt.slice(prompt.indexOf('Preflight'));
+    expect(preflightSection).toContain('preflight skill');
   });
 
   it('explicitly excludes image uploads from preflight', () => {
