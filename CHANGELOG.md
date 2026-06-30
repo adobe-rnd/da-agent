@@ -1,3 +1,10 @@
+## [1.24.8](https://github.com/adobe-rnd/da-agent/compare/v1.24.7...v1.24.8) (2026-06-30)
+
+
+### Bug Fixes
+
+* **pipeline:** inject synthetic results for orphaned tool calls ([a7e8939](https://github.com/adobe-rnd/da-agent/commit/a7e89394a728a4ea7928cf0edaec94237e949f71))
+
 ## [1.24.7](https://github.com/adobe-rnd/da-agent/compare/v1.24.6...v1.24.7) (2026-06-30)
 
 
