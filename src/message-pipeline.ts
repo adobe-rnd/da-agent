@@ -179,18 +179,27 @@ export function stripClientOnlyFromArgs(args: any): any {
 
 function formatSelectionContextForModel(items: any[]): string {
   const lines: string[] = [
-    'The user attached the following excerpt(s) from the page they are editing. Treat this as authoritative context for their message. Indices refer to positions in the collaborative editor document.',
+    'The user attached the following excerpt(s) from the page they are editing. Treat this as authoritative context for their message. Indices refer to positions in the collaborative editor document. Text-type items contain HTML preserving the original structure (marks, images, partial blocks).',
     '',
   ];
   items.forEach((item, i) => {
+    const type = item?.type;
     const idx = typeof item?.proseIndex === 'number' ? item.proseIndex : '?';
-    let label = 'Prose section';
-    if (typeof item?.blockName === 'string' && item.blockName.trim()) {
-      label = `Block "${item.blockName.trim()}"`;
-    }
+    const name = typeof item?.blockName === 'string' ? item.blockName.trim() : '';
     const body = typeof item?.innerText === 'string' ? item.innerText.trim() : '';
-    lines.push(`${i + 1}. ${label} (editor index: ${idx})`);
-    if (body) lines.push(`   Content: ${body}`);
+    if (type === 'text') {
+      const html = typeof item?.innerHTML === 'string' ? item.innerHTML.trim() : '';
+      lines.push(`${i + 1}. Text selection (editor index: ${idx})`);
+      if (html) lines.push(`   HTML: ${html}`);
+    } else if (type === 'file' || type === 'folder') {
+      const kind = type === 'file' ? 'File' : 'Folder';
+      lines.push(`${i + 1}. ${name ? `${kind} "${name}"` : kind}`);
+      if (body) lines.push(`   Content: ${body}`);
+    } else {
+      const label = name ? `Block "${name}"` : 'Prose section';
+      lines.push(`${i + 1}. ${label} (editor index: ${idx})`);
+      if (body) lines.push(`   Content: ${body}`);
+    }
     lines.push('');
   });
   return lines.join('\n').trimEnd();

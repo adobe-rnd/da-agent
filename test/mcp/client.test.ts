@@ -27,15 +27,20 @@ describe('MCPClient', () => {
   describe('initialize', () => {
     it('sends initialize request and notifications/initialized', async () => {
       mockFetch
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0',
-          id: 1,
-          result: {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            serverInfo: { name: 'test', version: '1.0' },
-          },
-        }, { 'Mcp-Session-Id': 'session-123' }))
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                protocolVersion: '2025-03-26',
+                capabilities: {},
+                serverInfo: { name: 'test', version: '1.0' },
+              },
+            },
+            { 'Mcp-Session-Id': 'session-123' },
+          ),
+        )
         .mockResolvedValueOnce(new Response(null, { status: 202 }));
 
       const client = new MCPClient('https://mcp.example.com/mcp');
@@ -56,14 +61,28 @@ describe('MCPClient', () => {
 
     it('includes session ID in subsequent requests', async () => {
       mockFetch
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0', id: 1,
-          result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'test' } },
-        }, { 'Mcp-Session-Id': 'abc' }))
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                protocolVersion: '2025-03-26',
+                capabilities: {},
+                serverInfo: { name: 'test' },
+              },
+            },
+            { 'Mcp-Session-Id': 'abc' },
+          ),
+        )
         .mockResolvedValueOnce(new Response(null, { status: 202 }))
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0', id: 2, result: { tools: [] },
-        }));
+        .mockResolvedValueOnce(
+          jsonResponse({
+            jsonrpc: '2.0',
+            id: 2,
+            result: { tools: [] },
+          }),
+        );
 
       const client = new MCPClient('https://mcp.example.com/mcp');
       await client.initialize();
@@ -74,23 +93,73 @@ describe('MCPClient', () => {
     });
   });
 
+  describe('custom fetcher (service binding)', () => {
+    it('routes requests through the provided fetcher instead of global fetch', async () => {
+      const bindingFetch = vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                protocolVersion: '2025-03-26',
+                capabilities: {},
+                serverInfo: { name: 'bound' },
+              },
+            },
+            { 'Mcp-Session-Id': 'bound-session' },
+          ),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 202 }));
+      const fetcher = { fetch: bindingFetch } as unknown as Fetcher;
+
+      const client = new MCPClient('https://aem-agentic-plugins-ci.adobeaem.workers.dev/mcp', {
+        fetcher,
+      });
+      await client.initialize();
+
+      expect(client.isInitialized).toBe(true);
+      expect(bindingFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).not.toHaveBeenCalled();
+      // URL is preserved so the bound worker routes on the same path.
+      expect(bindingFetch.mock.calls[0][0]).toBe(
+        'https://aem-agentic-plugins-ci.adobeaem.workers.dev/mcp',
+      );
+    });
+  });
+
   describe('listTools', () => {
     it('returns tool definitions', async () => {
       mockFetch
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0', id: 1,
-          result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'test' } },
-        }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              protocolVersion: '2025-03-26',
+              capabilities: {},
+              serverInfo: { name: 'test' },
+            },
+          }),
+        )
         .mockResolvedValueOnce(new Response(null, { status: 202 }))
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0', id: 2,
-          result: {
-            tools: [
-              { name: 'get_data', description: 'Fetch data', inputSchema: { type: 'object', properties: { query: { type: 'string' } } } },
-              { name: 'save_data', description: 'Save data' },
-            ],
-          },
-        }));
+        .mockResolvedValueOnce(
+          jsonResponse({
+            jsonrpc: '2.0',
+            id: 2,
+            result: {
+              tools: [
+                {
+                  name: 'get_data',
+                  description: 'Fetch data',
+                  inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+                },
+                { name: 'save_data', description: 'Save data' },
+              ],
+            },
+          }),
+        );
 
       const client = new MCPClient('https://mcp.example.com/mcp');
       await client.initialize();
@@ -109,19 +178,68 @@ describe('MCPClient', () => {
   });
 
   describe('callTool', () => {
+    it('times out using callToolTimeout, not the general timeout', async () => {
+      mockFetch
+        .mockResolvedValueOnce(
+          jsonResponse({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              protocolVersion: '2025-03-26',
+              capabilities: {},
+              serverInfo: { name: 'test' },
+            },
+          }),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 202 }))
+        // tool call hangs until aborted
+        .mockImplementationOnce(
+          (_url: string, opts: RequestInit) =>
+            new Promise((_resolve, reject) => {
+              opts.signal?.addEventListener('abort', () => {
+                const err = new Error('The operation was aborted');
+                err.name = 'AbortError';
+                reject(err);
+              });
+            }),
+        );
+
+      const client = new MCPClient('https://mcp.example.com/mcp', {
+        timeout: 60000, // general timeout: generous
+        callToolTimeout: 100, // tool-call timeout: short
+      });
+      await client.initialize();
+
+      vi.useFakeTimers();
+      const callPromise = client.callTool('slow_tool', {});
+      vi.advanceTimersByTime(101);
+      await expect(callPromise).rejects.toThrow('timed out after 100ms');
+      vi.useRealTimers();
+    });
+
     it('calls a tool and returns result', async () => {
       mockFetch
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0', id: 1,
-          result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'test' } },
-        }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              protocolVersion: '2025-03-26',
+              capabilities: {},
+              serverInfo: { name: 'test' },
+            },
+          }),
+        )
         .mockResolvedValueOnce(new Response(null, { status: 202 }))
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0', id: 2,
-          result: {
-            content: [{ type: 'text', text: 'Hello from tool' }],
-          },
-        }));
+        .mockResolvedValueOnce(
+          jsonResponse({
+            jsonrpc: '2.0',
+            id: 2,
+            result: {
+              content: [{ type: 'text', text: 'Hello from tool' }],
+            },
+          }),
+        );
 
       const client = new MCPClient('https://mcp.example.com/mcp');
       await client.initialize();
@@ -140,9 +258,19 @@ describe('MCPClient', () => {
   describe('SSE response handling', () => {
     it('parses JSON-RPC response from SSE stream', async () => {
       mockFetch
-        .mockResolvedValueOnce(sseResponse([
-          JSON.stringify({ jsonrpc: '2.0', id: 1, result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'test' } } }),
-        ]))
+        .mockResolvedValueOnce(
+          sseResponse([
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                protocolVersion: '2025-03-26',
+                capabilities: {},
+                serverInfo: { name: 'test' },
+              },
+            }),
+          ]),
+        )
         .mockResolvedValueOnce(new Response(null, { status: 202 }));
 
       const client = new MCPClient('https://mcp.example.com/mcp');
@@ -153,18 +281,22 @@ describe('MCPClient', () => {
 
   describe('error handling', () => {
     it('throws on JSON-RPC error response', async () => {
-      mockFetch
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0', id: 1,
+      mockFetch.mockResolvedValueOnce(
+        jsonResponse({
+          jsonrpc: '2.0',
+          id: 1,
           error: { code: -32600, message: 'Invalid Request' },
-        }));
+        }),
+      );
 
       const client = new MCPClient('https://mcp.example.com/mcp');
       await expect(client.initialize()).rejects.toThrow('Invalid Request');
     });
 
     it('throws on HTTP error', async () => {
-      mockFetch.mockResolvedValueOnce(new Response('Server Error', { status: 500, statusText: 'Internal Server Error' }));
+      mockFetch.mockResolvedValueOnce(
+        new Response('Server Error', { status: 500, statusText: 'Internal Server Error' }),
+      );
 
       const client = new MCPClient('https://mcp.example.com/mcp');
       await expect(client.initialize()).rejects.toThrow('500');
@@ -174,10 +306,20 @@ describe('MCPClient', () => {
   describe('close', () => {
     it('sends DELETE request with session ID', async () => {
       mockFetch
-        .mockResolvedValueOnce(jsonResponse({
-          jsonrpc: '2.0', id: 1,
-          result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: { name: 'test' } },
-        }, { 'Mcp-Session-Id': 'sess-1' }))
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                protocolVersion: '2025-03-26',
+                capabilities: {},
+                serverInfo: { name: 'test' },
+              },
+            },
+            { 'Mcp-Session-Id': 'sess-1' },
+          ),
+        )
         .mockResolvedValueOnce(new Response(null, { status: 202 }))
         .mockResolvedValueOnce(new Response(null, { status: 200 }));
 

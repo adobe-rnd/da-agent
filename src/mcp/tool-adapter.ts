@@ -133,7 +133,17 @@ export async function connectAndRegisterMCPTools(
     mcpServers: Record<string, MCPServerConfig>;
     toolAllowPatterns: string[];
   },
-  options?: { headers?: Record<string, string>; timeout?: number },
+  options?: {
+    headers?: Record<string, string>;
+    timeout?: number;
+    callToolTimeout?: number;
+    /**
+     * Resolve a service-binding Fetcher for a given server URL, or undefined to
+     * use the global fetch. Used to reach same-account `*.workers.dev` MCP
+     * servers that a plain fetch cannot route to.
+     */
+    resolveFetcher?: (url: string) => Fetcher | undefined;
+  },
 ): Promise<{ tools: Record<string, Tool>; clients: MCPClient[]; errors: MCPConnectionError[] }> {
   const tools: Record<string, Tool> = {};
   const clients: MCPClient[] = [];
@@ -157,9 +167,12 @@ export async function connectAndRegisterMCPTools(
         ...remoteHeaders,
       };
 
+      const fetcher = options?.resolveFetcher?.(url);
       const client = new MCPClient(url, {
         headers: serverHeaders,
         timeout: options?.timeout ?? 15000,
+        callToolTimeout: options?.callToolTimeout ?? 60000,
+        ...(fetcher ? { fetcher } : {}),
       });
 
       try {

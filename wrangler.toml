@@ -11,7 +11,7 @@ keep_vars = true
 enabled = true
 
 [dev]
-port = 4002
+port = 4200
 
 # ----------------------------------------------------------------------
 # CI environment
@@ -21,6 +21,7 @@ name = "da-agent-ci"
 services = [
   { binding = "DAADMIN", service = "da-admin-stage" },
   { binding = "DACOLLAB", service = "da-collab-stage" },
+  { binding = "AEM_AGENTIC_PLUGINS", service = "aem-agentic-plugins-ci" },
 ]
 
 [env.ci.vars]
@@ -31,7 +32,7 @@ RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
 LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 GOVERNANCE_AGENT_URL = "https://adobe-aem-foundation-brand-governance-agent-deploy-9950ff.cloud.adobe.io/mcp/"
-TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com"
+TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev"
 
 # ----------------------------------------------------------------------
 # production environment
@@ -41,6 +42,7 @@ name = "da-agent"
 services = [
   { binding = "DAADMIN", service = "da-admin" },
   { binding = "DACOLLAB", service = "da-collab" },
+  { binding = "AEM_AGENTIC_PLUGINS", service = "aem-agentic-plugins" },
 ]
 
 [env.production.vars]
@@ -51,7 +53,7 @@ RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
 LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 GOVERNANCE_AGENT_URL = "https://adobe-aem-foundation-brand-governance-agent-deploy-9950ff.cloud.adobe.io/mcp/"
-TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com"
+TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev"
 
 # ----------------------------------------------------------------------
 # dev environment (local)
@@ -71,5 +73,5 @@ RETURN_STACK_TRACES = "true"
 DA_ORIGIN = "http://localhost:8787"
 LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 GOVERNANCE_AGENT_URL = "https://brand-governance-agent-stage.adobe.io/mcp/"
-TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com"
+TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev"
 AO_BACKEND_URL = "http://localhost:64053"

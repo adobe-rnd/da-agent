@@ -6,10 +6,11 @@
 
 import { loadSkillsIndexFromFolders, loadSkillBodyFromFolder } from './skills/folder-loader.js';
 import type { SkillsIndex } from './skills/loader.js';
+import { mergeMarketplaceSkillsIntoIndex } from './marketplace/gh-skills.js';
 import { loadAgentPreset } from './agents/loader.js';
 import { getBuiltinPreset } from './agents/builtin-presets.js';
 import type { AgentPreset } from './agents/loader.js';
-import type { ChatContext } from './chat-context.js';
+import type { EarlyChatContext } from './chat-context.js';
 import { mergeAOSkillsIntoIndex, isAOSkill } from './ao/skill-adapter.js';
 import { resolveAOSkillBody, type AOContext } from './ao/integration.js';
 
@@ -20,8 +21,12 @@ export interface ResolvedSkills {
   requestedSkillContents: Record<string, string>;
 }
 
+/**
+ * Resolve skill index, agent preset, and skill contents.
+ * Only needs adminClient + pageContext so it can run before collab resolves.
+ */
 export async function resolveSkillsAndAgent(
-  ctx: ChatContext,
+  ctx: Pick<EarlyChatContext, 'adminClient' | 'pageContext'>,
   body: { agentId?: string; requestedSkills?: string[] },
   aoCtx?: AOContext | null,
 ): Promise<ResolvedSkills> {
@@ -31,11 +36,15 @@ export async function resolveSkillsAndAgent(
   let skillsIndex: SkillsIndex | null = null;
   if (adminClient && pageContext) {
     try {
-      skillsIndex = await loadSkillsIndexFromFolders(
+      const folderIndex = await loadSkillsIndexFromFolders(
         adminClient,
         pageContext.org,
         pageContext.site,
       );
+      // Append marketplace script-skills. Folder skills are prose-only (no
+      // execution metadata). If the marketplace is unreachable the index is
+      // returned unchanged.
+      skillsIndex = await mergeMarketplaceSkillsIntoIndex(folderIndex);
     } catch (err) {
       console.warn('[da-agent] failed to load skills index:', err);
     }

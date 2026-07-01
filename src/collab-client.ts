@@ -170,11 +170,11 @@ export class CollabClient {
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
         console.warn(
-          `[CollabClient] Connection timeout after 5s for ${this.docPath} — proceeding without collab`,
+          `[CollabClient] Connection timeout after 3s for ${this.docPath} — proceeding without collab`,
         );
         this.isConnected = false;
         resolve();
-      }, 5000);
+      }, 3000);
 
       this.provider!.on('sync', (isSynced: boolean) => {
         if (isSynced) {

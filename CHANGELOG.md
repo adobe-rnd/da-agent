@@ -1,3 +1,52 @@
+## [1.24.6](https://github.com/adobe-rnd/da-agent/compare/v1.24.5...v1.24.6) (2026-06-26)
+
+
+### Bug Fixes
+
+* **mcp:** route same-account workers.dev MCP servers via service binding ([1428d74](https://github.com/adobe-rnd/da-agent/commit/1428d7438630210773ea3ee23a34a3733f0ee931))
+
+## [1.24.5](https://github.com/adobe-rnd/da-agent/compare/v1.24.4...v1.24.5) (2026-06-25)
+
+
+### Bug Fixes
+
+* add support for file/folder ([#52](https://github.com/adobe-rnd/da-agent/issues/52)) ([4682e28](https://github.com/adobe-rnd/da-agent/commit/4682e28f6613105ad67c8a36c40abf89d88b77ee))
+
+## [1.24.4](https://github.com/adobe-rnd/da-agent/compare/v1.24.3...v1.24.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* remove aem.page from allowlist ([753b751](https://github.com/adobe-rnd/da-agent/commit/753b75125e3f76c197b093943d02fc0f2e1d134e))
+
+## [1.24.3](https://github.com/adobe-rnd/da-agent/compare/v1.24.2...v1.24.3) (2026-06-11)
+
+
+### Bug Fixes
+
+* Separate timeouts for tool calls ([#46](https://github.com/adobe-rnd/da-agent/issues/46)) ([b4be885](https://github.com/adobe-rnd/da-agent/commit/b4be8858e8c5fb54dedc9f8839e08115bdd27ce3))
+
+## [1.24.2](https://github.com/adobe-rnd/da-agent/compare/v1.24.1...v1.24.2) (2026-06-05)
+
+
+### Bug Fixes
+
+* **mcp:** inject IMS token in /mcp-tools validation endpoint ([7959a66](https://github.com/adobe-rnd/da-agent/commit/7959a668c44d0ce68157394b4356bf4c7f722e3d))
+
+## [1.24.1](https://github.com/adobe-rnd/da-agent/compare/v1.24.0...v1.24.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **perf:** harden parallelization correctness and cache safety ([2ddb591](https://github.com/adobe-rnd/da-agent/commit/2ddb59137f19d187e3978094a8819b6aea91280f))
+
+
+### Performance Improvements
+
+* **da-admin:** memoize getSiteConfig per client instance ([23d67d2](https://github.com/adobe-rnd/da-agent/commit/23d67d2277fa730bd4c8e117bc69009b44704393))
+* **generated-tools:** merge index + approved loading into single pass ([193a298](https://github.com/adobe-rnd/da-agent/commit/193a2982cff57135b473eb2bcc348a83e9596deb))
+* **server:** parallelize pre-stream pipeline and reduce collab timeout ([404d059](https://github.com/adobe-rnd/da-agent/commit/404d059664ae19dece9ce74789420461c78191a0))
+
 # [1.24.0](https://github.com/adobe-rnd/da-agent/compare/v1.23.0...v1.24.0) (2026-06-05)
 
 

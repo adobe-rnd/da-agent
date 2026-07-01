@@ -43,6 +43,7 @@ export type PageContext = {
 export type DAToolsOptions = {
   pageContext?: PageContext;
   collab?: CollabClient | null;
+  getCollab?: () => Promise<CollabClient | null>;
   resolveAttachmentByRef?: (attachmentRef: string) => {
     base64Data: string;
     mimeType: string;
@@ -50,14 +51,20 @@ export type DAToolsOptions = {
   } | null;
 };
 
-function useCollabForDoc(
+async function resolveCollab(options?: DAToolsOptions): Promise<CollabClient | null> {
+  if (options?.getCollab) return options.getCollab();
+  return options?.collab ?? null;
+}
+
+function isCollabForDoc(
   org: string,
   repo: string,
   path: string,
-  options?: DAToolsOptions,
+  collab: CollabClient | null,
+  pageContext?: PageContext,
 ): boolean {
-  if (!options?.pageContext || !options?.collab?.isConnected) return false;
-  const { org: ctxOrg, site: ctxSite, path: ctxPath, view } = options.pageContext;
+  if (!pageContext || !collab?.isConnected) return false;
+  const { org: ctxOrg, site: ctxSite, path: ctxPath, view } = pageContext;
   if (!isCollabEligibleView(view)) return false;
   return (
     ctxOrg === org && ctxSite === repo && ensureHtmlExtension(ctxPath) === ensureHtmlExtension(path)
@@ -108,8 +115,9 @@ export function createDATools(
       }),
       execute: async ({ org, repo, path }) => {
         try {
-          if (useCollabForDoc(org, repo, path, opts) && opts?.collab) {
-            const content = opts.collab.getContent();
+          const collab = await resolveCollab(opts);
+          if (isCollabForDoc(org, repo, path, collab, opts?.pageContext) && collab) {
+            const content = collab.getContent();
             if (content != null) {
               return {
                 path: ensureHtmlExtension(path),
@@ -187,12 +195,13 @@ export function createDATools(
       execute: async ({ org, repo, path, content, contentType, humanReadableSummary }) => {
         const pathWithExt = ensureHtmlExtension(path);
         try {
-          if (useCollabForDoc(org, repo, path, opts) && opts?.collab) {
-            opts.collab.applyContent(content);
+          const collab = await resolveCollab(opts);
+          if (isCollabForDoc(org, repo, path, collab, opts?.pageContext) && collab) {
+            collab.applyContent(content);
             await client.updateSource(org, repo, pathWithExt, content, contentType, {
               initiator: 'collab',
             });
-            opts.collab.disconnect();
+            collab.disconnect();
             recordPageChange(client, org, repo, pathWithExt, humanReadableSummary);
             return { path: pathWithExt, source: 'collab', updated: true };
           }
@@ -584,6 +593,7 @@ export const CANVAS_CLIENT_ONLY_TOOLS = [
   'da_bulk_preview',
   'da_bulk_publish',
   'da_bulk_delete',
+  'skill_run_script',
 ] as const;
 
 const bulkAemCanvasDialogOutputSchema = z.object({
@@ -647,6 +657,39 @@ export function createCanvasClientTools() {
         'The user confirms in the dialog; results return after they finish or cancel.',
       inputSchema: bulkAemPagesInputSchema,
       outputSchema: bulkAemCanvasDialogOutputSchema,
+    }),
+    skill_run_script: tool({
+      description:
+        'Run a script-carrying skill in the DA canvas. ' +
+        'The script is executed by the client (da-nx) in a sandboxed web worker — the agent does NOT run it. ' +
+        'Only call this tool for skills that are listed as script-runnable in the system prompt. ' +
+        'Pass the skill ID exactly as shown and supply the input object documented by the skill. ' +
+        'Do NOT include capabilities, runtimes, or any execution metadata in the call — ' +
+        'the client resolves those independently from the trusted skill manifest.',
+      inputSchema: z.object({
+        skillId: z
+          .string()
+          .min(1)
+          .describe(
+            'The skill ID exactly as listed (e.g. "convert-tables" or "ao:convert-tables").',
+          ),
+        input: z
+          .record(z.string(), z.unknown())
+          .describe(
+            "Input data for the skill script, as a JSON object per the skill's documented input shape.",
+          ),
+      }),
+      outputSchema: z.object({
+        output: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe('Output returned by the skill script on success.'),
+        error: z
+          .string()
+          .optional()
+          .describe('Error message when the client could not run the skill script.'),
+      }),
+      // No `execute` — this tool is client-executed (runs in da-nx web worker).
     }),
   };
 }

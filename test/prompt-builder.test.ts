@@ -14,6 +14,15 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('NEVER output raw HTML');
   });
 
+  it('includes error communication guidance (no internal details)', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('Never expose internal');
+    expect(prompt).toContain('HTTP status codes');
+    expect(prompt).toContain('stack traces');
+    expect(prompt).toContain('retry as needed without narrating it');
+    expect(prompt).toContain('Do NOT narrate your plan or intermediate progress');
+  });
+
   it('includes EDS HTML rules', () => {
     const prompt = buildSystemPrompt();
     expect(prompt).toContain('<body>');
@@ -157,6 +166,22 @@ describe('buildSystemPrompt with skills', () => {
   it('omits skills section when empty', () => {
     const prompt = buildSystemPrompt(undefined, null, { skills: [] });
     expect(prompt).not.toContain('Available Skills');
+  });
+
+  it('includes attachmentRef guidance in the script-runnable skills section', () => {
+    const skillsIndex = {
+      skills: [
+        {
+          id: 'import-csv',
+          title: 'Import CSV',
+          execution: { type: 'script' as const, scriptUrl: 'https://example.com/script.js' },
+        },
+      ],
+    };
+    const prompt = buildSystemPrompt(undefined, null, skillsIndex);
+    expect(prompt).toContain('Script-Runnable Skills');
+    expect(prompt).toContain('attachmentRef');
+    expect(prompt).toContain('file bytes or base64');
   });
 });
 

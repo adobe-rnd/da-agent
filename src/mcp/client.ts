@@ -34,6 +34,14 @@ interface JsonRpcResponse {
 export interface MCPClientOptions {
   headers?: Record<string, string>;
   timeout?: number;
+  callToolTimeout?: number;
+  /**
+   * Optional Fetcher (Cloudflare service binding) to use instead of the global
+   * `fetch`. Required for MCP servers on the same account's `*.workers.dev`
+   * zone, which a plain `fetch` cannot reach. The full URL is still passed so
+   * the bound worker routes on the same path.
+   */
+  fetcher?: Fetcher;
 }
 
 export class MCPClient {
@@ -43,16 +51,23 @@ export class MCPClient {
 
   private timeout: number;
 
+  private callToolTimeout: number;
+
   private sessionId: string | null = null;
 
   private nextId = 1;
 
   private initialized = false;
 
+  private doFetch: typeof fetch;
+
   constructor(url: string, options?: MCPClientOptions) {
     this.url = url;
     this.headers = options?.headers ?? {};
     this.timeout = options?.timeout ?? 30000;
+    this.callToolTimeout = options?.callToolTimeout ?? 60000;
+    // Route through the service binding when provided, else the global fetch.
+    this.doFetch = options?.fetcher ? options.fetcher.fetch.bind(options.fetcher) : fetch;
   }
 
   private buildRequest(method: string, params?: Record<string, unknown>): JsonRpcRequest {
@@ -74,7 +89,11 @@ export class MCPClient {
    * Send a JSON-RPC request and get the response.
    * Handles both application/json and text/event-stream responses.
    */
-  private async send(request: JsonRpcRequest): Promise<JsonRpcResponse | null> {
+  private async send(
+    request: JsonRpcRequest,
+    timeoutOverride?: number,
+  ): Promise<JsonRpcResponse | null> {
+    const effectiveTimeout = timeoutOverride ?? this.timeout;
     const reqHeaders: Record<string, string> = {
       ...this.headers,
       'Content-Type': 'application/json',
@@ -86,10 +105,10 @@ export class MCPClient {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
     try {
-      const response = await fetch(this.url, {
+      const response = await this.doFetch(this.url, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(request),
@@ -124,7 +143,7 @@ export class MCPClient {
     } catch (e) {
       clearTimeout(timeoutId);
       if (e instanceof Error && e.name === 'AbortError') {
-        throw new Error(`MCP request timed out after ${this.timeout}ms`);
+        throw new Error(`MCP request timed out after ${effectiveTimeout}ms`);
       }
       throw e;
     }
@@ -219,6 +238,7 @@ export class MCPClient {
 
     const response = await this.send(
       this.buildRequest('tools/call', { name, arguments: args ?? {} }),
+      this.callToolTimeout,
     );
     return this.unwrapResult<MCPToolResult>(response);
   }

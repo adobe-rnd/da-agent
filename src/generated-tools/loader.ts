@@ -82,53 +82,22 @@ async function listToolFiles(
 }
 
 /**
- * Load the generated tools index (all statuses) for system prompt awareness.
+ * Load all generated tool definitions in a single pass: list the directory
+ * once, read each file once, and return both the summary index (for the
+ * system prompt) and the full approved definitions (for tool stub registration).
+ *
+ * Previously these were two separate functions that each listed + read the
+ * same files, doubling the DA Admin calls.
  */
-export async function loadGeneratedToolsIndex(
+export async function loadGeneratedTools(
   client: DAAdminClient,
   org: string,
   site: string,
-): Promise<GeneratedToolsIndex> {
+): Promise<{ index: GeneratedToolsIndex; approved: GeneratedToolDef[] }> {
   const { items, source } = await listToolFiles(client, org, site);
-  if (items.length === 0) return { tools: [], source: 'none' };
-
-  const defs = await Promise.all(
-    items.map(async (item) => {
-      const subPath = `generated-tools/${item.name}${!item.name.endsWith('.json') ? '.json' : ''}`;
-      try {
-        const raw = await client.getSource(org, `.da`, subPath);
-        const body = typeof raw === 'string' ? raw : ((raw as { content?: string })?.content ?? '');
-        const def = JSON.parse(body) as GeneratedToolDef;
-        return {
-          id: def.id,
-          name: def.name,
-          description: def.description,
-          status: def.status,
-          capability: def.capability,
-        } satisfies GeneratedToolSummary;
-      } catch {
-        return null;
-      }
-    }),
-  );
-
-  return {
-    tools: defs.filter(Boolean) as GeneratedToolSummary[],
-    source,
-  };
-}
-
-/**
- * Load all approved generated tool definitions for a tenant.
- * Called once per /chat request to build tool stubs.
- */
-export async function loadApprovedGeneratedTools(
-  client: DAAdminClient,
-  org: string,
-  site: string,
-): Promise<GeneratedToolDef[]> {
-  const { items, source } = await listToolFiles(client, org, site);
-  if (items.length === 0) return [];
+  if (items.length === 0) {
+    return { index: { tools: [], source: 'none' }, approved: [] };
+  }
 
   const repo = source === 'site' ? site : org;
 
@@ -139,15 +108,29 @@ export async function loadApprovedGeneratedTools(
       try {
         const raw = await client.getSource(org, repo, subPath);
         const body = typeof raw === 'string' ? raw : ((raw as { content?: string })?.content ?? '');
-        const def = JSON.parse(body) as GeneratedToolDef;
-        return def.status === 'approved' ? def : null;
+        return JSON.parse(body) as GeneratedToolDef;
       } catch {
         return null;
       }
     }),
   );
 
-  return defs.filter(Boolean) as GeneratedToolDef[];
+  const valid = defs.filter(Boolean) as GeneratedToolDef[];
+
+  const index: GeneratedToolsIndex = {
+    tools: valid.map((def) => ({
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      status: def.status,
+      capability: def.capability,
+    })),
+    source,
+  };
+
+  const approved = valid.filter((def) => def.status === 'approved');
+
+  return { index, approved };
 }
 
 /**
