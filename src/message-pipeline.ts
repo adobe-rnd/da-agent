@@ -70,70 +70,66 @@ export async function resolveApprovals(
   for (let i = 0; i < result.length; i += 1) {
     const msg = result[i];
     if (msg.role === 'tool' && Array.isArray(msg.content)) {
-      const resp = msg.content.find((p: any) => p.type === 'tool-approval-response');
-      if (resp) {
+      // Use filter (not find) so all approval responses in a multi-approval message are processed.
+      const resps = msg.content.filter((p: any) => p.type === 'tool-approval-response');
+      if (resps.length === 0) continue; // eslint-disable-line no-continue
+
+      const toolResults: any[] = [];
+
+      for (const resp of resps) {
         const meta = approvalMeta.get(resp.approvalId);
-        if (meta) {
-          const { toolCallId, toolName, args, msgIdx } = meta;
+        if (!meta) continue; // eslint-disable-line no-continue
 
-          result[msgIdx].content = result[msgIdx].content.filter(
-            (p: any) => !(p.type === 'tool-approval-request' && p.approvalId === resp.approvalId),
-          );
+        const { toolCallId, toolName, args, msgIdx } = meta;
 
-          const alreadyResolved = result.some(
-            (m) =>
-              m.role === 'tool' &&
-              Array.isArray(m.content) &&
-              m.content.some((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId),
-          );
-          if (alreadyResolved) {
-            // eslint-disable-next-line no-continue
-            continue;
-          }
+        result[msgIdx].content = result[msgIdx].content.filter(
+          (p: any) => !(p.type === 'tool-approval-request' && p.approvalId === resp.approvalId),
+        );
 
-          if (i < lastConversationIdx) {
-            result[i] = {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId,
-                  toolName,
-                  output: resp.approved
-                    ? { type: 'text' as const, value: '(previously executed)' }
-                    : { type: 'json' as const, value: { message: 'Action rejected by user.' } },
-                },
-              ],
-            };
-          } else {
-            let output: any;
-            if (resp.approved && daTools[toolName]?.execute) {
-              try {
-                const cleanArgs = stripClientOnlyFromArgs(args);
-                output = await daTools[toolName].execute(cleanArgs, { toolCallId, messages: [] });
-              } catch (e) {
-                output = { error: String(e) };
-              }
-            } else {
-              output = { message: 'Action rejected by user.' };
+        const alreadyResolved = result.some(
+          (m) =>
+            m.role === 'tool' &&
+            Array.isArray(m.content) &&
+            m.content.some((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId),
+        );
+        if (alreadyResolved) continue; // eslint-disable-line no-continue
+
+        if (i < lastConversationIdx) {
+          toolResults.push({
+            type: 'tool-result',
+            toolCallId,
+            toolName,
+            output: resp.approved
+              ? { type: 'text' as const, value: '(previously executed)' }
+              : { type: 'json' as const, value: { message: 'Action rejected by user.' } },
+          });
+        } else {
+          let output: any;
+          if (resp.approved && daTools[toolName]?.execute) {
+            try {
+              const cleanArgs = stripClientOnlyFromArgs(args);
+              output = await daTools[toolName].execute(cleanArgs, { toolCallId, messages: [] });
+            } catch (e) {
+              output = { error: String(e) };
             }
-
-            result[i] = {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId,
-                  toolName,
-                  output:
-                    typeof output === 'string'
-                      ? { type: 'text', value: output }
-                      : { type: 'json', value: output },
-                },
-              ],
-            };
+          } else {
+            output = { message: 'Action rejected by user.' };
           }
+
+          toolResults.push({
+            type: 'tool-result',
+            toolCallId,
+            toolName,
+            output:
+              typeof output === 'string'
+                ? { type: 'text', value: output }
+                : { type: 'json', value: output },
+          });
         }
+      }
+
+      if (toolResults.length > 0) {
+        result[i] = { role: 'tool', content: toolResults };
       }
     }
   }
