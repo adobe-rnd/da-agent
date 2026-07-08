@@ -1,3 +1,11 @@
+## [1.24.9](https://github.com/adobe-rnd/da-agent/compare/v1.24.8...v1.24.9) (2026-07-08)
+
+
+### Bug Fixes
+
+* **agent:** also stop narrating internal plan/progress steps to users ([80ea711](https://github.com/adobe-rnd/da-agent/commit/80ea711ab52bdd21f0862d9db0f4f96f9d4c2b1b))
+* **agent:** do not disclose internal error details (status codes, services, retries) to users ([9a3f788](https://github.com/adobe-rnd/da-agent/commit/9a3f7884c34abc6d48690a6b4a2f779c0593a590))
+
 ## [1.24.8](https://github.com/adobe-rnd/da-agent/compare/v1.24.7...v1.24.8) (2026-06-30)
 
 
