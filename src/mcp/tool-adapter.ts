@@ -85,7 +85,11 @@ function mcpSchemaToZod(
   return z.object(shape) as ZodType<Record<string, unknown>>;
 }
 
-function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient: MCPClient) {
+export function mcpToolToAITool(
+  serverId: string,
+  mcpTool: MCPToolDefinition,
+  mcpClient: MCPClient,
+) {
   const toolName = `mcp__${serverId}__${mcpTool.name}`;
   const description = mcpTool.description ?? `MCP tool ${mcpTool.name} from server ${serverId}`;
 
@@ -99,6 +103,7 @@ function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient
     tool: tool({
       description,
       inputSchema,
+      needsApproval: async () => mcpTool.annotations?.destructiveHint === true,
       execute: async (args: Record<string, unknown>) => {
         try {
           const result = await mcpClient.callTool(mcpTool.name, args);
