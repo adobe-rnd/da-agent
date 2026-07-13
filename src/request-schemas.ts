@@ -5,6 +5,7 @@ export const PageContextSchema = z.object({
   site: z.string(),
   path: z.string().optional().default(''),
   view: z.string().optional(),
+  timeZone: z.string().optional(),
 });
 
 export type PageContext = z.infer<typeof PageContextSchema>;
