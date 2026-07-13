@@ -1,3 +1,15 @@
+# [1.25.0](https://github.com/adobe-rnd/da-agent/compare/v1.24.9...v1.25.0) (2026-07-13)
+
+
+### Bug Fixes
+
+* **mcp:** fail-closed approval gating for MCP tools ([9ce5aa4](https://github.com/adobe-rnd/da-agent/commit/9ce5aa4ae5876483345674451841606c6626051e))
+
+
+### Features
+
+* **mcp:** gate destructive MCP tools behind approval ([5fca251](https://github.com/adobe-rnd/da-agent/commit/5fca251b44f78cb8e00c4fbab387384c8b5d92a8))
+
 ## [1.24.9](https://github.com/adobe-rnd/da-agent/compare/v1.24.8...v1.24.9) (2026-07-08)
 
 
