@@ -103,7 +103,16 @@ export function mcpToolToAITool(
     tool: tool({
       description,
       inputSchema,
-      needsApproval: async () => mcpTool.annotations?.destructiveHint === true,
+      // Fail-closed gating for untrusted external MCP servers. Per the MCP spec
+      // annotation defaults (readOnlyHint=false, destructiveHint=true) and the
+      // fact that annotations are optional, we gate unless the tool tells us it
+      // is safe: skip approval only when it is read-only OR explicitly
+      // non-destructive. Everything else — including unannotated tools —
+      // requires approval.
+      needsApproval: async () => {
+        const { readOnlyHint, destructiveHint } = mcpTool.annotations ?? {};
+        return readOnlyHint !== true && destructiveHint !== false;
+      },
       execute: async (args: Record<string, unknown>) => {
         try {
           const result = await mcpClient.callTool(mcpTool.name, args);
