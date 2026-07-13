@@ -10,6 +10,7 @@ export interface MCPToolDefinition {
   name: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
 }
 
 export interface MCPToolResult {

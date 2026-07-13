@@ -85,7 +85,11 @@ function mcpSchemaToZod(
   return z.object(shape) as ZodType<Record<string, unknown>>;
 }
 
-function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient: MCPClient) {
+export function mcpToolToAITool(
+  serverId: string,
+  mcpTool: MCPToolDefinition,
+  mcpClient: MCPClient,
+) {
   const toolName = `mcp__${serverId}__${mcpTool.name}`;
   const description = mcpTool.description ?? `MCP tool ${mcpTool.name} from server ${serverId}`;
 
@@ -99,6 +103,16 @@ function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient
     tool: tool({
       description,
       inputSchema,
+      // Fail-closed gating for untrusted external MCP servers. Per the MCP spec
+      // annotation defaults (readOnlyHint=false, destructiveHint=true) and the
+      // fact that annotations are optional, we gate unless the tool tells us it
+      // is safe: skip approval only when it is read-only OR explicitly
+      // non-destructive. Everything else — including unannotated tools —
+      // requires approval.
+      needsApproval: async () => {
+        const { readOnlyHint, destructiveHint } = mcpTool.annotations ?? {};
+        return readOnlyHint !== true && destructiveHint !== false;
+      },
       execute: async (args: Record<string, unknown>) => {
         try {
           const result = await mcpClient.callTool(mcpTool.name, args);
