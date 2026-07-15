@@ -374,12 +374,14 @@ export function createDAMCPRegistry(
   const client = new DAAdminClient({ apiToken: imsToken, daadminService });
 
   /**
-   * Connect to da-collab for a doc and return the client ONLY if a human currently
-   * has it open in the canvas (so the write must go through the live session).
-   * Returns null — and cleans up any connection — otherwise, or on any failure, so
-   * callers transparently fall back to da-admin. Never throws.
+   * Connect to da-collab for a doc so reads/edits go through the live session (which
+   * persists to da-admin) rather than touching da-admin directly. A headless MCP call
+   * can't tell whether the doc is open in a canvas, so edits/reads ALWAYS route through
+   * da-collab when it's available — a direct da-admin write could clobber a live session.
+   * Returns null — cleaning up any connection — when da-collab is unbound or the
+   * connection fails, so callers fall back to da-admin. Never throws.
    */
-  async function openCanvasCollab(
+  async function connectCollab(
     org: string,
     repo: string,
     pathWithExt: string,
@@ -390,7 +392,7 @@ export function createDAMCPRegistry(
       const userName = extractImsUserId(imsToken) ?? org;
       const collab = await createCollabClient(sourceUrl, imsToken, userName, options.dacollab);
       if (!collab) return null;
-      if (!collab.isConnected || !collab.hasOtherHumanParticipants()) {
+      if (!collab.isConnected) {
         collab.disconnect();
         return null;
       }
@@ -414,9 +416,9 @@ export function createDAMCPRegistry(
 
         case 'content_read': {
           const path = ensureHtmlExtension(args.path as string);
-          // If a human has the doc open in the canvas, read the live (possibly
-          // unsaved) content from da-collab; otherwise read da-admin (source of truth).
-          const collab = await openCanvasCollab(org, repo, path);
+          // Read through da-collab so we see the live (possibly unsaved) content when the
+          // doc is open; falls back to da-admin (source of truth) if collab is unavailable.
+          const collab = await connectCollab(org, repo, path);
           if (collab) {
             try {
               const content = collab.getContent();
@@ -441,10 +443,10 @@ export function createDAMCPRegistry(
           const path = ensureHtmlExtension(args.path as string);
           const content = args.content as string;
           const contentType = (args.contentType as string | undefined) ?? 'text/html';
-          // If a human has the doc open in the canvas, apply the change to the live
-          // da-collab session (which persists to da-admin) so their editor stays
-          // consistent; a direct da-admin write would be clobbered by the session.
-          const collab = await openCanvasCollab(org, repo, path);
+          // Apply the edit to the live da-collab session (which persists to da-admin) so an
+          // open editor stays consistent and a live session can't clobber the write; falls
+          // back to a direct da-admin write only if da-collab is unavailable.
+          const collab = await connectCollab(org, repo, path);
           if (collab) {
             try {
               collab.applyContent(content);

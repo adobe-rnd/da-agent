@@ -277,26 +277,6 @@ export class CollabClient {
   }
 
   /**
-   * True if a non-AI (human) participant is present in the collab room — i.e. the
-   * document is currently open in someone's canvas editor. A headless MCP call has
-   * no browser page context, so this is how the plugin decides whether a write must
-   * go through da-collab (to keep the live editor consistent) rather than straight
-   * to da-admin.
-   */
-  hasOtherHumanParticipants(): boolean {
-    const { awareness } = this.provider ?? {};
-    if (!awareness) return false;
-    const selfId = awareness.clientID;
-    let human = false;
-    awareness.getStates().forEach((state: Record<string, unknown>, clientId: number) => {
-      if (clientId === selfId) return;
-      const user = state?.user as { isAI?: boolean } | undefined;
-      if (user && !user.isAI) human = true;
-    });
-    return human;
-  }
-
-  /**
    * Disconnect from da-collab
    */
   disconnect(): void {
