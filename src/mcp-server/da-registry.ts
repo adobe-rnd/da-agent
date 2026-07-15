@@ -20,7 +20,21 @@ import { saveSkillContent } from '../skills/loader.js';
 import { loadSkillBodyFromFolder } from '../skills/folder-loader.js';
 import { listAgentPresets, saveAgentPreset, type AgentPreset } from '../agents/loader.js';
 import { saveProjectMemory } from '../memory/loader.js';
+import { createCollabClient, type CollabClient } from '../collab-client.js';
+import { extractImsUserId } from '../auth.js';
 import type { MCPToolDef, MCPToolRegistry } from './handler.js';
+
+/**
+ * Optional da-collab wiring. When present, content reads/writes to a document that
+ * is currently open in someone's canvas editor are routed through da-collab (which
+ * persists to da-admin) instead of writing da-admin directly — otherwise a direct
+ * da-admin write would be clobbered by the live collaborative session. When absent,
+ * or when no human has the doc open, operations use da-admin directly (unchanged).
+ */
+export interface DAMCPRegistryOptions {
+  dacollab?: Fetcher;
+  daOrigin?: string;
+}
 
 const orgRepo = {
   org: { type: 'string', description: 'Organization name (e.g. "adobe")' },
@@ -352,8 +366,39 @@ const DA_TOOLS: MCPToolDef[] = [
  *  isn't a safe path to prevent HTML-attribute injection. */
 const SAFE_FRAGMENT_PATH = /^[A-Za-z0-9/_.-]+$/;
 
-export function createDAMCPRegistry(imsToken: string, daadminService: Fetcher): MCPToolRegistry {
+export function createDAMCPRegistry(
+  imsToken: string,
+  daadminService: Fetcher,
+  options?: DAMCPRegistryOptions,
+): MCPToolRegistry {
   const client = new DAAdminClient({ apiToken: imsToken, daadminService });
+
+  /**
+   * Connect to da-collab for a doc and return the client ONLY if a human currently
+   * has it open in the canvas (so the write must go through the live session).
+   * Returns null — and cleans up any connection — otherwise, or on any failure, so
+   * callers transparently fall back to da-admin. Never throws.
+   */
+  async function openCanvasCollab(
+    org: string,
+    repo: string,
+    pathWithExt: string,
+  ): Promise<CollabClient | null> {
+    if (!options?.dacollab || !options.daOrigin) return null;
+    try {
+      const sourceUrl = `${options.daOrigin}/source/${org}/${repo}/${pathWithExt}`;
+      const userName = extractImsUserId(imsToken) ?? org;
+      const collab = await createCollabClient(sourceUrl, imsToken, userName, options.dacollab);
+      if (!collab) return null;
+      if (!collab.isConnected || !collab.hasOtherHumanParticipants()) {
+        collab.disconnect();
+        return null;
+      }
+      return collab;
+    } catch {
+      return null;
+    }
+  }
 
   return {
     tools: DA_TOOLS,
@@ -367,8 +412,21 @@ export function createDAMCPRegistry(imsToken: string, daadminService: Fetcher): 
           return client.listSources(org, repo, path);
         }
 
-        case 'content_read':
-          return client.getSource(org, repo, ensureHtmlExtension(args.path as string));
+        case 'content_read': {
+          const path = ensureHtmlExtension(args.path as string);
+          // If a human has the doc open in the canvas, read the live (possibly
+          // unsaved) content from da-collab; otherwise read da-admin (source of truth).
+          const collab = await openCanvasCollab(org, repo, path);
+          if (collab) {
+            try {
+              const content = collab.getContent();
+              if (content != null) return { path, content, source: 'collab' };
+            } finally {
+              collab.disconnect();
+            }
+          }
+          return client.getSource(org, repo, path);
+        }
 
         case 'content_create':
           return client.createSource(
@@ -379,14 +437,27 @@ export function createDAMCPRegistry(imsToken: string, daadminService: Fetcher): 
             (args.contentType as string | undefined) ?? 'text/html',
           );
 
-        case 'content_update':
-          return client.updateSource(
-            org,
-            repo,
-            ensureHtmlExtension(args.path as string),
-            args.content as string,
-            (args.contentType as string | undefined) ?? 'text/html',
-          );
+        case 'content_update': {
+          const path = ensureHtmlExtension(args.path as string);
+          const content = args.content as string;
+          const contentType = (args.contentType as string | undefined) ?? 'text/html';
+          // If a human has the doc open in the canvas, apply the change to the live
+          // da-collab session (which persists to da-admin) so their editor stays
+          // consistent; a direct da-admin write would be clobbered by the session.
+          const collab = await openCanvasCollab(org, repo, path);
+          if (collab) {
+            try {
+              collab.applyContent(content);
+              await client.updateSource(org, repo, path, content, contentType, {
+                initiator: 'collab',
+              });
+              return { path, source: 'collab', updated: true };
+            } finally {
+              collab.disconnect();
+            }
+          }
+          return client.updateSource(org, repo, path, content, contentType);
+        }
 
         case 'content_delete':
           return client.deleteSource(org, repo, ensureHtmlExtension(args.path as string));

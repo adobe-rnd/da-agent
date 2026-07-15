@@ -95,7 +95,13 @@ export default {
           headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
         });
       }
-      return handleMCPRequest(request, createDAMCPRegistry(token, env.DAADMIN));
+      return handleMCPRequest(
+        request,
+        createDAMCPRegistry(token, env.DAADMIN, {
+          dacollab: env.DACOLLAB,
+          daOrigin: env.DA_ORIGIN,
+        }),
+      );
     }
 
     // CMA plugin surface: EDS preview/publish tools (eds-preview bundle).
