@@ -1,3 +1,10 @@
+## [1.25.2](https://github.com/adobe-rnd/da-agent/compare/v1.25.1...v1.25.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* config ([eb6867d](https://github.com/adobe-rnd/da-agent/commit/eb6867d1c0ce29fe8eec32911123f61cb8df8a68))
+
 ## [1.25.1](https://github.com/adobe-rnd/da-agent/compare/v1.25.0...v1.25.1) (2026-07-16)
 
 
