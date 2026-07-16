@@ -257,9 +257,12 @@ The user is currently working on the following document in DA (Document Authorin
 - site (repo): ${pageContext.site}
 - path: ${ensureHtmlExtension(pageContext.path)}
 - view: ${pageContext.view}
+- user's local time zone: ${pageContext.timeZone ?? 'unknown'}
 - Live Preview URL: https://main--${pageContext.site}--${pageContext.org}.${environment === 'production' || !environment ? 'preview.da.live' : 'stage-preview.da.live'}${pathForUrl}
 - Previewed URL: https://main--${pageContext.site}--${pageContext.org}.aem.page${pathForUrl}
 - Published URL: https://main--${pageContext.site}--${pageContext.org}.aem.live${pathForUrl}
+
+Use the user's local time zone above when interpreting relative dates/times (e.g. "today", "next Monday") or converting timestamps for display — including when calling any date/time tool — unless the user specifies otherwise.
 
 **URL freshness rules:**
 - The **Live Preview URL** always reflects the current state of the document as it appears right now in DA — no operation needed.

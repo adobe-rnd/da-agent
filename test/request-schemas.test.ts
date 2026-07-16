@@ -23,6 +23,17 @@ describe('PageContextSchema', () => {
     expect(result.data?.view).toBe('edit');
   });
 
+  it('accepts optional timeZone field', () => {
+    const result = PageContextSchema.safeParse({
+      org: 'adobe',
+      site: 'docs',
+      path: '/index.html',
+      timeZone: 'America/New_York',
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.timeZone).toBe('America/New_York');
+  });
+
   it('rejects missing org', () => {
     const result = PageContextSchema.safeParse({ site: 'docs', path: '/index.html' });
     expect(result.success).toBe(false);

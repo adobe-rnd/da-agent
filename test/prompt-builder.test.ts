@@ -53,6 +53,16 @@ describe('buildSystemPrompt with pageContext', () => {
     expect(prompt).toContain('/index.html');
   });
 
+  it('includes user time zone when present', () => {
+    const prompt = buildSystemPrompt({ ...pageContext, timeZone: 'America/New_York' });
+    expect(prompt).toContain('America/New_York');
+  });
+
+  it('shows unknown time zone when absent', () => {
+    const prompt = buildSystemPrompt(pageContext);
+    expect(prompt).toContain("user's local time zone: unknown");
+  });
+
   it('includes live preview URL', () => {
     const prompt = buildSystemPrompt(
       pageContext,
