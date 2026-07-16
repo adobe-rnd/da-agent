@@ -1,3 +1,10 @@
+## [1.25.1](https://github.com/adobe-rnd/da-agent/compare/v1.25.0...v1.25.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* add trusted domain ([0239d56](https://github.com/adobe-rnd/da-agent/commit/0239d56b994ba5c14169bdebc82a230017d5d065))
+
 # [1.25.0](https://github.com/adobe-rnd/da-agent/compare/v1.24.9...v1.25.0) (2026-07-13)
 
 
