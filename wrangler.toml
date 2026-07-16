@@ -53,7 +53,7 @@ RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
 LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 GOVERNANCE_AGENT_URL = "https://adobe-aem-foundation-brand-governance-agent-deploy-9950ff.cloud.adobe.io/mcp/"
-TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev"
+TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev, mcp.adobeaemcloud.com"
 
 # ----------------------------------------------------------------------
 # dev environment (local)
@@ -73,4 +73,4 @@ RETURN_STACK_TRACES = "true"
 DA_ORIGIN = "http://localhost:8787"
 LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 GOVERNANCE_AGENT_URL = "https://brand-governance-agent-stage.adobe.io/mcp/"
-TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev"
+TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev, mcp.adobeaemcloud.com"
