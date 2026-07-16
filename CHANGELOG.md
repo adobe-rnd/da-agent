@@ -1,3 +1,10 @@
+# [1.26.0](https://github.com/adobe-rnd/da-agent/compare/v1.25.2...v1.26.0) (2026-07-16)
+
+
+### Features
+
+* add user's timezone to the agent context ([1ce2764](https://github.com/adobe-rnd/da-agent/commit/1ce2764772a06d8d2064d77b0af92a1033c21989))
+
 ## [1.25.2](https://github.com/adobe-rnd/da-agent/compare/v1.25.1...v1.25.2) (2026-07-16)
 
 
