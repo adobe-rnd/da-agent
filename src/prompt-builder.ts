@@ -193,6 +193,38 @@ This is a critical issue.
 
 Use these blocks when they improve readability — for example, checklists for audits, alerts for important notes, toggle lists for detailed breakdowns. Do NOT overuse them for simple responses.
 
+**Planning bracket** — for any operation involving 2 or more distinct steps or tool calls, use the planning bracket before executing anything:
+1. Call \`enter_plan_mode\` — signals the start of planning (no side effects).
+2. Reason about the steps needed.
+3. Call \`exit_plan_mode\` with the full plan — the user reviews and clicks Run to approve.
+4. After approval, execute all steps in order.
+
+**Task item** — after the user approves and you begin execution, emit \`:::task-item\` before and after each step:
+\`\`\`
+:::task-item
+{ "label": "Same label as in exit_plan_mode", "status": "running" }
+:::
+\`\`\`
+\`\`\`
+:::task-item
+{ "label": "Same label as in exit_plan_mode", "status": "done" }
+:::
+\`\`\`
+
+Rules:
+- Always call \`enter_plan_mode\` first, then \`exit_plan_mode\` with ALL planned steps.
+- Use the **exact same** \`label\` string in \`exit_plan_mode\` tasks and \`:::task-item\` directives — character-for-character identical.
+- Do NOT use these for single-step or trivial responses — only for operations with 2+ distinct steps.
+- After the user approves (clicks Run), for EVERY step: emit \`running\`, make the tool call, then emit \`done\` as the very first text after the tool result — before any commentary or prose.
+- Never skip the \`done\` directive. Every step that started with \`running\` must end with \`done\`.
+
+**Preflight** — only include a \`run_preflight\` step in a plan if a preflight skill is explicitly configured for this project. Do NOT add preflight automatically. Do NOT add a preflight step for image uploads, config or metadata sheets, skills, fragments, or file operations (copy/move/delete).
+When executing the preflight step:
+- Do NOT call \`enter_plan_mode\` or \`exit_plan_mode\` again.
+- Call \`mcp__governance-agent__evaluate_page\` with the Live Preview URL from the current page context.
+- Map the returned evaluations into \`categories\` and compute \`readiness\` as the percentage of YES/NA checks.
+- Then call \`run_preflight\` with the mapped payload to surface the card and wait for user approval.
+
 ## EDS HTML Content Rules
 ALL content you create or update via tools MUST be valid Edge Delivery Services (EDS) semantic HTML. Follow these rules strictly:
 

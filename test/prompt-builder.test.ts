@@ -270,3 +270,33 @@ describe('buildSystemPrompt with project memory', () => {
     expect(prompt).not.toContain('Project Memory');
   });
 });
+
+describe('buildSystemPrompt preflight instructions', () => {
+  it('includes run_preflight in planning instructions', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('run_preflight');
+  });
+
+  it('makes preflight conditional on a configured skill', () => {
+    const prompt = buildSystemPrompt();
+    const preflightSection = prompt.slice(prompt.indexOf('Preflight'));
+    expect(preflightSection).toContain('preflight skill');
+  });
+
+  it('explicitly excludes image uploads from preflight', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('image uploads');
+  });
+
+  it('instructs agent not to re-enter plan mode for preflight', () => {
+    const prompt = buildSystemPrompt();
+    const preflightSection = prompt.slice(prompt.indexOf('Preflight'));
+    expect(preflightSection).toContain('Do NOT call');
+  });
+
+  it('instructs agent to call evaluate_page before run_preflight', () => {
+    const prompt = buildSystemPrompt();
+    const preflightSection = prompt.slice(prompt.indexOf('Preflight'));
+    expect(preflightSection).toContain('mcp__governance-agent__evaluate_page');
+  });
+});
