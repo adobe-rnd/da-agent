@@ -1,12 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import {
-  resolveApprovals,
+  reconcileApprovals,
+  toModelMessages,
   stripClientOnlyToolInputs,
   stripClientOnlyFromArgs,
   ensureOrphanedToolResults,
   expandUserSelectionContextForModel,
   expandLatestUserAttachmentsForModel,
+  TOOL_STATE,
 } from '../src/message-pipeline.js';
+
+// Build a v2 assistant message wrapping a single tool part.
+const toolMsg = (part: Record<string, unknown>) => ({
+  role: 'assistant',
+  content: [{ type: 'tool', ...part }],
+});
 
 describe('stripClientOnlyFromArgs', () => {
   it('removes _da-prefixed keys', () => {
@@ -331,97 +339,104 @@ describe('ensureOrphanedToolResults', () => {
   });
 });
 
-describe('resolveApprovals', () => {
-  it('returns messages unchanged when no approvals exist', async () => {
+describe('reconcileApprovals', () => {
+  it('returns messages unchanged with no executed outputs when nothing is approved', async () => {
     const messages = [
       { role: 'user', content: 'hello' },
       { role: 'assistant', content: 'hi' },
     ];
-    const result = await resolveApprovals(messages, {});
-    expect(result).toEqual(messages);
+    const { messages: out, executedOutputs } = await reconcileApprovals(messages, {});
+    expect(out).toEqual(messages);
+    expect(executedOutputs).toEqual([]);
   });
 
-  it('executes fresh approved tool and creates tool-result', async () => {
+  it('executes an approved tool part and attaches its output', async () => {
     const messages = [
-      {
-        role: 'assistant',
-        content: [
-          { type: 'tool-call', toolCallId: 'tc1', toolName: 'myTool', input: { x: 1 } },
-          { type: 'tool-approval-request', toolCallId: 'tc1', approvalId: 'ap1' },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [{ type: 'tool-approval-response', approvalId: 'ap1', approved: true }],
-      },
+      toolMsg({
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        input: { x: 1 },
+        state: TOOL_STATE.APPROVED,
+      }),
     ];
     const tools = {
       myTool: { execute: async (args: Record<string, unknown>) => `executed with ${args.x}` },
     };
-    const result = await resolveApprovals(messages, tools);
-    const toolMsg = result[1];
-    expect(toolMsg.role).toBe('tool');
-    expect(toolMsg.content[0].type).toBe('tool-result');
-    expect(toolMsg.content[0].output.value).toBe('executed with 1');
+    const { messages: out, executedOutputs } = await reconcileApprovals(messages, tools);
+    expect(out[0].content[0].state).toBe(TOOL_STATE.OUTPUT_AVAILABLE);
+    expect(out[0].content[0].output).toBe('executed with 1');
+    expect(executedOutputs).toEqual([
+      { toolCallId: 'tc1', output: 'executed with 1', isError: false },
+    ]);
   });
 
-  it('creates rejection result for rejected approval', async () => {
+  // Bug 1 + Bug 3: every approved tool in the batch runs, and they run in order.
+  it('executes multiple approved tool parts sequentially in order', async () => {
+    const order: string[] = [];
     const messages = [
-      {
-        role: 'assistant',
-        content: [
-          { type: 'tool-call', toolCallId: 'tc1', toolName: 'myTool', input: {} },
-          { type: 'tool-approval-request', toolCallId: 'tc1', approvalId: 'ap1' },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [{ type: 'tool-approval-response', approvalId: 'ap1', approved: false }],
-      },
+      toolMsg({ toolCallId: 'a', toolName: 'run', input: { id: 'a' }, state: TOOL_STATE.APPROVED }),
+      toolMsg({ toolCallId: 'b', toolName: 'run', input: { id: 'b' }, state: TOOL_STATE.APPROVED }),
     ];
-    const result = await resolveApprovals(messages, {});
-    expect(result[1].content[0].output.value.message).toBe('Action rejected by user.');
+    const tools = {
+      run: {
+        execute: async (args: Record<string, unknown>) => {
+          order.push(args.id as string);
+          return `ran ${args.id}`;
+        },
+      },
+    };
+    const { messages: out, executedOutputs } = await reconcileApprovals(messages, tools);
+    expect(order).toEqual(['a', 'b']);
+    expect(out[0].content[0].state).toBe(TOOL_STATE.OUTPUT_AVAILABLE);
+    expect(out[1].content[0].state).toBe(TOOL_STATE.OUTPUT_AVAILABLE);
+    expect(executedOutputs.map((o) => o.toolCallId)).toEqual(['a', 'b']);
   });
 
-  it('creates synthetic result for stale approval', async () => {
+  it('leaves rejected parts untouched and does not execute them', async () => {
+    let called = false;
     const messages = [
-      {
-        role: 'assistant',
-        content: [
-          { type: 'tool-call', toolCallId: 'tc1', toolName: 'myTool', input: {} },
-          { type: 'tool-approval-request', toolCallId: 'tc1', approvalId: 'ap1' },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [{ type: 'tool-approval-response', approvalId: 'ap1', approved: true }],
-      },
-      { role: 'assistant', content: 'I did the thing' },
-      { role: 'user', content: 'thanks' },
+      toolMsg({ toolCallId: 'tc1', toolName: 'myTool', input: {}, state: TOOL_STATE.REJECTED }),
     ];
-    const result = await resolveApprovals(messages, {});
-    expect(result[1].content[0].output.value).toBe('(previously executed)');
+    const tools = {
+      myTool: {
+        execute: async () => {
+          called = true;
+          return 'x';
+        },
+      },
+    };
+    const { messages: out, executedOutputs } = await reconcileApprovals(messages, tools);
+    expect(called).toBe(false);
+    expect(out[0].content[0].state).toBe(TOOL_STATE.REJECTED);
+    expect(executedOutputs).toEqual([]);
   });
 
-  it('strips _da keys from args before executing', async () => {
+  it('captures execution errors as output-error', async () => {
+    const messages = [
+      toolMsg({ toolCallId: 'tc1', toolName: 'boom', input: {}, state: TOOL_STATE.APPROVED }),
+    ];
+    const tools = {
+      boom: {
+        execute: async () => {
+          throw new Error('kaboom');
+        },
+      },
+    };
+    const { messages: out, executedOutputs } = await reconcileApprovals(messages, tools);
+    expect(out[0].content[0].state).toBe(TOOL_STATE.OUTPUT_ERROR);
+    expect(out[0].content[0].errorText).toBe('kaboom');
+    expect(executedOutputs).toEqual([{ toolCallId: 'tc1', isError: true, errorText: 'kaboom' }]);
+  });
+
+  it('strips _da keys from input before executing', async () => {
     let capturedArgs: Record<string, unknown> = {};
     const messages = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: 'tc1',
-            toolName: 'myTool',
-            input: { path: '/a', _daSnap: 'x' },
-          },
-          { type: 'tool-approval-request', toolCallId: 'tc1', approvalId: 'ap1' },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [{ type: 'tool-approval-response', approvalId: 'ap1', approved: true }],
-      },
+      toolMsg({
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        input: { path: '/a', _daSnap: 'x' },
+        state: TOOL_STATE.APPROVED,
+      }),
     ];
     const tools = {
       myTool: {
@@ -431,50 +446,100 @@ describe('resolveApprovals', () => {
         },
       },
     };
-    await resolveApprovals(messages, tools);
+    await reconcileApprovals(messages, tools);
     expect(capturedArgs).toEqual({ path: '/a' });
   });
 });
 
-describe('resolveApprovals + ensureOrphanedToolResults pipeline', () => {
-  it('resolved approval tool-call does not get a second synthetic result', async () => {
-    const messages = [
-      {
-        role: 'assistant',
-        content: [
-          { type: 'tool-call', toolCallId: 'tc1', toolName: 'create', input: {} },
-          { type: 'tool-approval-request', toolCallId: 'tc1', approvalId: 'ap1' },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [{ type: 'tool-approval-response', approvalId: 'ap1', approved: true }],
-      },
-    ];
-    const tools = { create: { execute: async () => 'done' } };
-    const afterApprovals = await resolveApprovals(messages, tools);
-    const afterOrphans = ensureOrphanedToolResults(afterApprovals);
-    expect(afterOrphans).toEqual(afterApprovals);
+describe('toModelMessages', () => {
+  it('passes user messages through and stringifies assistant text', () => {
+    const out = toModelMessages([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' },
+    ]);
+    expect(out).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' },
+    ]);
   });
 
-  it('rejected stale approval does not trigger orphan injection', async () => {
-    const messages = [
-      {
-        role: 'assistant',
-        content: [
-          { type: 'tool-call', toolCallId: 'tc1', toolName: 'create', input: {} },
-          { type: 'tool-approval-request', toolCallId: 'tc1', approvalId: 'ap1' },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [{ type: 'tool-approval-response', approvalId: 'ap1', approved: false }],
-      },
-      { role: 'assistant', content: 'ok, skipped' },
-      { role: 'user', content: 'thanks' },
-    ];
-    const afterApprovals = await resolveApprovals(messages, {});
-    const afterOrphans = ensureOrphanedToolResults(afterApprovals);
-    expect(afterOrphans).toEqual(afterApprovals);
+  it('expands an output-available tool part into tool-call + tool-result', () => {
+    const out = toModelMessages([
+      toolMsg({
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        input: { x: 1 },
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        output: { ok: true },
+      }),
+    ]);
+    expect(out[0]).toEqual({
+      role: 'assistant',
+      content: [{ type: 'tool-call', toolCallId: 'tc1', toolName: 'myTool', input: { x: 1 } }],
+    });
+    expect(out[1]).toEqual({
+      role: 'tool',
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          output: { type: 'json', value: { ok: true } },
+        },
+      ],
+    });
+  });
+
+  it('emits an error-text result for output-error parts', () => {
+    const out = toModelMessages([
+      toolMsg({
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        input: {},
+        state: TOOL_STATE.OUTPUT_ERROR,
+        errorText: 'nope',
+      }),
+    ]);
+    expect(out[1].content[0].output).toEqual({ type: 'error-text', value: 'nope' });
+  });
+
+  it('emits a rejection result for rejected parts (so the tool_use is not orphaned)', () => {
+    const out = toModelMessages([
+      toolMsg({ toolCallId: 'tc1', toolName: 'myTool', input: {}, state: TOOL_STATE.REJECTED }),
+    ]);
+    expect(out[1].content[0].output).toEqual({
+      type: 'json',
+      value: { message: 'Action rejected by user.' },
+    });
+  });
+
+  it('strips _da keys from tool-call input', () => {
+    const out = toModelMessages([
+      toolMsg({
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        input: { path: '/a', _daSnap: 'x' },
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        output: 'ok',
+      }),
+    ]);
+    expect(out[0].content[0].input).toEqual({ path: '/a' });
+  });
+
+  it('leaves a tool part with no result unresolved for the orphan safety net', () => {
+    const out = toModelMessages([
+      toolMsg({
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        input: {},
+        state: TOOL_STATE.INPUT_AVAILABLE,
+      }),
+    ]);
+    // assistant tool-call only; no tool message
+    expect(out).toHaveLength(1);
+    expect(out[0].content[0].type).toBe('tool-call');
+    // the orphan net then injects a synthetic result
+    const withOrphans = ensureOrphanedToolResults(out);
+    expect(withOrphans[1].content[0].type).toBe('tool-result');
   });
 });
