@@ -14,6 +14,15 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('NEVER output raw HTML');
   });
 
+  it('includes error communication guidance (no internal details)', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('Never expose internal');
+    expect(prompt).toContain('HTTP status codes');
+    expect(prompt).toContain('stack traces');
+    expect(prompt).toContain('retry as needed without narrating it');
+    expect(prompt).toContain('Do NOT narrate your plan or intermediate progress');
+  });
+
   it('includes EDS HTML rules', () => {
     const prompt = buildSystemPrompt();
     expect(prompt).toContain('<body>');
@@ -42,6 +51,16 @@ describe('buildSystemPrompt with pageContext', () => {
     expect(prompt).toContain('adobe');
     expect(prompt).toContain('my-docs');
     expect(prompt).toContain('/index.html');
+  });
+
+  it('includes user time zone when present', () => {
+    const prompt = buildSystemPrompt({ ...pageContext, timeZone: 'America/New_York' });
+    expect(prompt).toContain('America/New_York');
+  });
+
+  it('shows unknown time zone when absent', () => {
+    const prompt = buildSystemPrompt(pageContext);
+    expect(prompt).toContain("user's local time zone: unknown");
   });
 
   it('includes live preview URL', () => {

@@ -1,3 +1,79 @@
+# [1.26.0](https://github.com/adobe-rnd/da-agent/compare/v1.25.2...v1.26.0) (2026-07-16)
+
+
+### Features
+
+* add user's timezone to the agent context ([1ce2764](https://github.com/adobe-rnd/da-agent/commit/1ce2764772a06d8d2064d77b0af92a1033c21989))
+
+## [1.25.2](https://github.com/adobe-rnd/da-agent/compare/v1.25.1...v1.25.2) (2026-07-16)
+
+
+### Bug Fixes
+
+* config ([eb6867d](https://github.com/adobe-rnd/da-agent/commit/eb6867d1c0ce29fe8eec32911123f61cb8df8a68))
+
+## [1.25.1](https://github.com/adobe-rnd/da-agent/compare/v1.25.0...v1.25.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* add trusted domain ([0239d56](https://github.com/adobe-rnd/da-agent/commit/0239d56b994ba5c14169bdebc82a230017d5d065))
+
+# [1.25.0](https://github.com/adobe-rnd/da-agent/compare/v1.24.9...v1.25.0) (2026-07-13)
+
+
+### Bug Fixes
+
+* **mcp:** fail-closed approval gating for MCP tools ([9ce5aa4](https://github.com/adobe-rnd/da-agent/commit/9ce5aa4ae5876483345674451841606c6626051e))
+
+
+### Features
+
+* **mcp:** gate destructive MCP tools behind approval ([5fca251](https://github.com/adobe-rnd/da-agent/commit/5fca251b44f78cb8e00c4fbab387384c8b5d92a8))
+
+## [1.24.9](https://github.com/adobe-rnd/da-agent/compare/v1.24.8...v1.24.9) (2026-07-08)
+
+
+### Bug Fixes
+
+* **agent:** also stop narrating internal plan/progress steps to users ([80ea711](https://github.com/adobe-rnd/da-agent/commit/80ea711ab52bdd21f0862d9db0f4f96f9d4c2b1b))
+* **agent:** do not disclose internal error details (status codes, services, retries) to users ([9a3f788](https://github.com/adobe-rnd/da-agent/commit/9a3f7884c34abc6d48690a6b4a2f779c0593a590))
+
+## [1.24.8](https://github.com/adobe-rnd/da-agent/compare/v1.24.7...v1.24.8) (2026-06-30)
+
+
+### Bug Fixes
+
+* **pipeline:** inject synthetic results for orphaned tool calls ([a7e8939](https://github.com/adobe-rnd/da-agent/commit/a7e89394a728a4ea7928cf0edaec94237e949f71))
+
+## [1.24.7](https://github.com/adobe-rnd/da-agent/compare/v1.24.6...v1.24.7) (2026-06-30)
+
+
+### Bug Fixes
+
+* **mcp:** bind global fetch to avoid Illegal invocation on remote MCP servers ([0cde01c](https://github.com/adobe-rnd/da-agent/commit/0cde01c557f7efb32d56c96b897e01bc504168e9))
+
+## [1.24.6](https://github.com/adobe-rnd/da-agent/compare/v1.24.5...v1.24.6) (2026-06-26)
+
+
+### Bug Fixes
+
+* **mcp:** route same-account workers.dev MCP servers via service binding ([1428d74](https://github.com/adobe-rnd/da-agent/commit/1428d7438630210773ea3ee23a34a3733f0ee931))
+
+## [1.24.5](https://github.com/adobe-rnd/da-agent/compare/v1.24.4...v1.24.5) (2026-06-25)
+
+
+### Bug Fixes
+
+* add support for file/folder ([#52](https://github.com/adobe-rnd/da-agent/issues/52)) ([4682e28](https://github.com/adobe-rnd/da-agent/commit/4682e28f6613105ad67c8a36c40abf89d88b77ee))
+
+## [1.24.4](https://github.com/adobe-rnd/da-agent/compare/v1.24.3...v1.24.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* remove aem.page from allowlist ([753b751](https://github.com/adobe-rnd/da-agent/commit/753b75125e3f76c197b093943d02fc0f2e1d134e))
+
 ## [1.24.3](https://github.com/adobe-rnd/da-agent/compare/v1.24.2...v1.24.3) (2026-06-11)
 
 

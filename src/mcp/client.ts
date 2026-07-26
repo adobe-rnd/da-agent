@@ -10,6 +10,7 @@ export interface MCPToolDefinition {
   name: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
+  annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
 }
 
 export interface MCPToolResult {
@@ -35,6 +36,13 @@ export interface MCPClientOptions {
   headers?: Record<string, string>;
   timeout?: number;
   callToolTimeout?: number;
+  /**
+   * Optional Fetcher (Cloudflare service binding) to use instead of the global
+   * `fetch`. Required for MCP servers on the same account's `*.workers.dev`
+   * zone, which a plain `fetch` cannot reach. The full URL is still passed so
+   * the bound worker routes on the same path.
+   */
+  fetcher?: Fetcher;
 }
 
 export class MCPClient {
@@ -52,11 +60,21 @@ export class MCPClient {
 
   private initialized = false;
 
+  private doFetch: typeof fetch;
+
   constructor(url: string, options?: MCPClientOptions) {
     this.url = url;
     this.headers = options?.headers ?? {};
     this.timeout = options?.timeout ?? 30000;
     this.callToolTimeout = options?.callToolTimeout ?? 60000;
+    // Route through the service binding when provided, else the global fetch.
+    // The global `fetch` must stay bound to the global scope: storing the bare
+    // reference and later calling it as `this.doFetch(...)` rebinds `this` to
+    // the MCPClient instance, which the runtime rejects with "Illegal
+    // invocation: function called with incorrect `this` reference".
+    this.doFetch = options?.fetcher
+      ? options.fetcher.fetch.bind(options.fetcher)
+      : fetch.bind(globalThis);
   }
 
   private buildRequest(method: string, params?: Record<string, unknown>): JsonRpcRequest {
@@ -97,7 +115,7 @@ export class MCPClient {
     const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
     try {
-      const response = await fetch(this.url, {
+      const response = await this.doFetch(this.url, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(request),

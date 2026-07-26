@@ -16,6 +16,7 @@ declare namespace Cloudflare {
     LANGFUSE_SECRET_KEY: string;
     DAADMIN: Fetcher /* da-admin-stage */;
     DACOLLAB: Fetcher /* da-collab-stage */;
+    AEM_AGENTIC_PLUGINS: Fetcher /* aem-agentic-plugins-ci */;
   }
   interface ProductionEnv {
     AWS_REGION: 'us-west-2';
@@ -29,6 +30,7 @@ declare namespace Cloudflare {
     LANGFUSE_SECRET_KEY: string;
     DAADMIN: Fetcher /* da-admin */;
     DACOLLAB: Fetcher /* da-collab */;
+    AEM_AGENTIC_PLUGINS: Fetcher /* aem-agentic-plugins */;
   }
   interface DevEnv {
     AWS_REGION: 'us-west-2';
@@ -58,6 +60,7 @@ declare namespace Cloudflare {
       | Fetcher /* da-collab-stage */
       | Fetcher /* da-collab */
       | Fetcher /* da-collab-local */;
+    AEM_AGENTIC_PLUGINS?: Fetcher /* aem-agentic-plugins-ci */ | Fetcher /* aem-agentic-plugins */;
     /** Development-only override for auto-compact threshold (0–1 exclusive) */
     COMPACT_THRESHOLD_OVERRIDE?: string;
     /** Feature flag: set to "true" to enable generated tools loading */

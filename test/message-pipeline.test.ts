@@ -3,6 +3,7 @@ import {
   resolveApprovals,
   stripClientOnlyToolInputs,
   stripClientOnlyFromArgs,
+  ensureOrphanedToolResults,
   expandUserSelectionContextForModel,
   expandLatestUserAttachmentsForModel,
 } from '../src/message-pipeline.js';
@@ -103,6 +104,64 @@ describe('expandUserSelectionContextForModel', () => {
     const result = expandUserSelectionContextForModel(messages);
     expect(result[0].content).toContain('Prose section');
   });
+
+  it('formats text-type selections with innerHTML', () => {
+    const messages = [
+      {
+        role: 'user',
+        content: 'Rewrite',
+        selectionContext: [
+          {
+            type: 'text',
+            proseIndex: 5,
+            innerHTML: '<p>world</p><p>Foo</p>',
+          },
+        ],
+      },
+    ];
+    const result = expandUserSelectionContextForModel(messages);
+    expect(result[0].content).toContain('Text selection');
+    expect(result[0].content).toContain('<p>world</p><p>Foo</p>');
+    expect(result[0].content).not.toContain('Prose section');
+  });
+
+  it('labels file items correctly without editor index', () => {
+    const messages = [
+      {
+        role: 'user',
+        content: 'What is this?',
+        selectionContext: [
+          {
+            type: 'file',
+            blockName: 'my-page',
+            innerText: 'Selected repository path: org/site/my-page',
+          },
+        ],
+      },
+    ];
+    const result = expandUserSelectionContextForModel(messages);
+    expect(result[0].content).toContain('File "my-page"');
+    expect(result[0].content).not.toContain('editor index');
+  });
+
+  it('labels folder items correctly without editor index', () => {
+    const messages = [
+      {
+        role: 'user',
+        content: 'List contents',
+        selectionContext: [
+          {
+            type: 'folder',
+            blockName: 'articles',
+            innerText: 'Selected repository path: org/site/articles',
+          },
+        ],
+      },
+    ];
+    const result = expandUserSelectionContextForModel(messages);
+    expect(result[0].content).toContain('Folder "articles"');
+    expect(result[0].content).not.toContain('editor index');
+  });
 });
 
 describe('expandLatestUserAttachmentsForModel', () => {
@@ -169,6 +228,106 @@ describe('expandLatestUserAttachmentsForModel', () => {
     const result = expandLatestUserAttachmentsForModel(messages, meta);
     expect(result[0].content).not.toContain('call content_upload using attachmentRef');
     expect(result[0].content).toContain('Previously uploaded');
+  });
+});
+
+describe('ensureOrphanedToolResults', () => {
+  it('returns messages unchanged when all tool-calls have results', () => {
+    const messages = [
+      { role: 'user', content: 'go' },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'tc1', toolName: 'read', input: {} }],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'tc1',
+            toolName: 'read',
+            output: { type: 'text', value: 'ok' },
+          },
+        ],
+      },
+    ];
+    expect(ensureOrphanedToolResults(messages)).toEqual(messages);
+  });
+
+  it('injects synthetic error result for orphaned tool-call', () => {
+    const messages = [
+      { role: 'user', content: 'go' },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool-call', toolCallId: 'tc1', toolName: 'read', input: {} }],
+      },
+      { role: 'assistant', content: 'summary' },
+    ];
+    const result = ensureOrphanedToolResults(messages);
+    expect(result).toHaveLength(4);
+    expect(result[2].role).toBe('tool');
+    expect(result[2].content[0].type).toBe('tool-result');
+    expect(result[2].content[0].toolCallId).toBe('tc1');
+    expect(result[2].content[0].output.type).toBe('error-text');
+    expect(result[3]).toEqual({ role: 'assistant', content: 'summary' });
+  });
+
+  it('handles multiple orphans from the same assistant message', () => {
+    const messages = [
+      { role: 'user', content: 'go' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'tc1', toolName: 'create', input: {} },
+          { type: 'tool-call', toolCallId: 'tc2', toolName: 'create', input: {} },
+        ],
+      },
+    ];
+    const result = ensureOrphanedToolResults(messages);
+    expect(result).toHaveLength(3);
+    const injected = result[2];
+    expect(injected.role).toBe('tool');
+    expect(injected.content).toHaveLength(2);
+    expect(injected.content[0].toolCallId).toBe('tc1');
+    expect(injected.content[1].toolCallId).toBe('tc2');
+  });
+
+  it('injects only for unresolved tool-calls, preserving existing results', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'tc1', toolName: 'read', input: {} },
+          { type: 'tool-call', toolCallId: 'tc2', toolName: 'create', input: {} },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'tc1',
+            toolName: 'read',
+            output: { type: 'text', value: 'ok' },
+          },
+        ],
+      },
+    ];
+    const result = ensureOrphanedToolResults(messages);
+    expect(result).toHaveLength(3);
+    const injected = result[1];
+    expect(injected.role).toBe('tool');
+    expect(injected.content).toHaveLength(1);
+    expect(injected.content[0].toolCallId).toBe('tc2');
+    expect(result[2].content[0].toolCallId).toBe('tc1');
+  });
+
+  it('leaves text-only messages untouched', () => {
+    const messages = [
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' },
+    ];
+    expect(ensureOrphanedToolResults(messages)).toEqual(messages);
   });
 });
 
@@ -274,5 +433,48 @@ describe('resolveApprovals', () => {
     };
     await resolveApprovals(messages, tools);
     expect(capturedArgs).toEqual({ path: '/a' });
+  });
+});
+
+describe('resolveApprovals + ensureOrphanedToolResults pipeline', () => {
+  it('resolved approval tool-call does not get a second synthetic result', async () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'tc1', toolName: 'create', input: {} },
+          { type: 'tool-approval-request', toolCallId: 'tc1', approvalId: 'ap1' },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [{ type: 'tool-approval-response', approvalId: 'ap1', approved: true }],
+      },
+    ];
+    const tools = { create: { execute: async () => 'done' } };
+    const afterApprovals = await resolveApprovals(messages, tools);
+    const afterOrphans = ensureOrphanedToolResults(afterApprovals);
+    expect(afterOrphans).toEqual(afterApprovals);
+  });
+
+  it('rejected stale approval does not trigger orphan injection', async () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'tc1', toolName: 'create', input: {} },
+          { type: 'tool-approval-request', toolCallId: 'tc1', approvalId: 'ap1' },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [{ type: 'tool-approval-response', approvalId: 'ap1', approved: false }],
+      },
+      { role: 'assistant', content: 'ok, skipped' },
+      { role: 'user', content: 'thanks' },
+    ];
+    const afterApprovals = await resolveApprovals(messages, {});
+    const afterOrphans = ensureOrphanedToolResults(afterApprovals);
+    expect(afterOrphans).toEqual(afterApprovals);
   });
 });

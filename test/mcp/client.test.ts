@@ -93,6 +93,42 @@ describe('MCPClient', () => {
     });
   });
 
+  describe('custom fetcher (service binding)', () => {
+    it('routes requests through the provided fetcher instead of global fetch', async () => {
+      const bindingFetch = vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              jsonrpc: '2.0',
+              id: 1,
+              result: {
+                protocolVersion: '2025-03-26',
+                capabilities: {},
+                serverInfo: { name: 'bound' },
+              },
+            },
+            { 'Mcp-Session-Id': 'bound-session' },
+          ),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 202 }));
+      const fetcher = { fetch: bindingFetch } as unknown as Fetcher;
+
+      const client = new MCPClient('https://aem-agentic-plugins-ci.adobeaem.workers.dev/mcp', {
+        fetcher,
+      });
+      await client.initialize();
+
+      expect(client.isInitialized).toBe(true);
+      expect(bindingFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).not.toHaveBeenCalled();
+      // URL is preserved so the bound worker routes on the same path.
+      expect(bindingFetch.mock.calls[0][0]).toBe(
+        'https://aem-agentic-plugins-ci.adobeaem.workers.dev/mcp',
+      );
+    });
+  });
+
   describe('listTools', () => {
     it('returns tool definitions', async () => {
       mockFetch
@@ -296,6 +332,68 @@ describe('MCPClient', () => {
 
       const deleteCall = mockFetch.mock.calls[2];
       expect(deleteCall[1].method).toBe('DELETE');
+    });
+  });
+
+  describe('global fetch binding (regression: Illegal invocation)', () => {
+    // Reproduces the production failure on external MCP servers (no service
+    // binding) with custom headers, e.g. Semrush with an Authorization header.
+    // The native `fetch` in Workers/undici throws "Illegal invocation" when
+    // called with a `this` other than the global scope. The plain vi.fn() mock
+    // used by the other tests does not enforce this, so the bug was invisible.
+    it('lists tools with custom headers and no fetcher without losing fetch `this`', async () => {
+      const responses: Response[] = [
+        jsonResponse(
+          {
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              protocolVersion: '2025-03-26',
+              capabilities: {},
+              serverInfo: { name: 'semrush' },
+            },
+          },
+          { 'Mcp-Session-Id': 'sess-binding' },
+        ),
+        new Response(null, { status: 202 }),
+        jsonResponse({
+          jsonrpc: '2.0',
+          id: 2,
+          result: { tools: [{ name: 'search', description: 'Search the web' }] },
+        }),
+      ];
+
+      const calls: Array<[string, RequestInit]> = [];
+
+      // A native-like fetch that rejects being detached from the global scope,
+      // mirroring the Cloudflare Workers / undici runtime. A normal (non-arrow)
+      // function so its `this` reflects the call site.
+      function bindingSensitiveFetch(this: unknown, url: string, init: RequestInit) {
+        if (this !== globalThis && this !== undefined) {
+          throw new TypeError("Failed to execute 'fetch': Illegal invocation");
+        }
+        calls.push([url, init]);
+        return Promise.resolve(responses.shift()!);
+      }
+
+      vi.stubGlobal('fetch', bindingSensitiveFetch);
+      try {
+        const client = new MCPClient('https://mcp.semrush.com/v1/mcp', {
+          headers: { Authorization: 'Bearer test-token' },
+        });
+
+        await client.initialize();
+        const tools = await client.listTools();
+
+        expect(tools).toEqual([{ name: 'search', description: 'Search the web' }]);
+        // The custom header is forwarded on every request.
+        expect((calls[0][1].headers as Record<string, string>).Authorization).toBe(
+          'Bearer test-token',
+        );
+      } finally {
+        // Restore the shared mock for any subsequent tests.
+        vi.stubGlobal('fetch', mockFetch);
+      }
     });
   });
 });

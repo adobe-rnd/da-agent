@@ -85,7 +85,11 @@ function mcpSchemaToZod(
   return z.object(shape) as ZodType<Record<string, unknown>>;
 }
 
-function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient: MCPClient) {
+export function mcpToolToAITool(
+  serverId: string,
+  mcpTool: MCPToolDefinition,
+  mcpClient: MCPClient,
+) {
   const toolName = `mcp__${serverId}__${mcpTool.name}`;
   const description = mcpTool.description ?? `MCP tool ${mcpTool.name} from server ${serverId}`;
 
@@ -99,6 +103,16 @@ function mcpToolToAITool(serverId: string, mcpTool: MCPToolDefinition, mcpClient
     tool: tool({
       description,
       inputSchema,
+      // Fail-closed gating for untrusted external MCP servers. Per the MCP spec
+      // annotation defaults (readOnlyHint=false, destructiveHint=true) and the
+      // fact that annotations are optional, we gate unless the tool tells us it
+      // is safe: skip approval only when it is read-only OR explicitly
+      // non-destructive. Everything else — including unannotated tools —
+      // requires approval.
+      needsApproval: async () => {
+        const { readOnlyHint, destructiveHint } = mcpTool.annotations ?? {};
+        return readOnlyHint !== true && destructiveHint !== false;
+      },
       execute: async (args: Record<string, unknown>) => {
         try {
           const result = await mcpClient.callTool(mcpTool.name, args);
@@ -133,7 +147,17 @@ export async function connectAndRegisterMCPTools(
     mcpServers: Record<string, MCPServerConfig>;
     toolAllowPatterns: string[];
   },
-  options?: { headers?: Record<string, string>; timeout?: number; callToolTimeout?: number },
+  options?: {
+    headers?: Record<string, string>;
+    timeout?: number;
+    callToolTimeout?: number;
+    /**
+     * Resolve a service-binding Fetcher for a given server URL, or undefined to
+     * use the global fetch. Used to reach same-account `*.workers.dev` MCP
+     * servers that a plain fetch cannot route to.
+     */
+    resolveFetcher?: (url: string) => Fetcher | undefined;
+  },
 ): Promise<{ tools: Record<string, Tool>; clients: MCPClient[]; errors: MCPConnectionError[] }> {
   const tools: Record<string, Tool> = {};
   const clients: MCPClient[] = [];
@@ -157,10 +181,12 @@ export async function connectAndRegisterMCPTools(
         ...remoteHeaders,
       };
 
+      const fetcher = options?.resolveFetcher?.(url);
       const client = new MCPClient(url, {
         headers: serverHeaders,
         timeout: options?.timeout ?? 15000,
         callToolTimeout: options?.callToolTimeout ?? 60000,
+        ...(fetcher ? { fetcher } : {}),
       });
 
       try {
