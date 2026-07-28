@@ -597,45 +597,6 @@ export function createDATools(
       execute: async () => ({ approved: true }),
     });
 
-    // run_preflight: dumb approval gate. The agent calls mcp__governance-agent__evaluate_page
-    // first, maps the results into the card schema, then calls this tool to surface the card
-    // and wait for user approval. No evaluation logic lives here.
-    tools.run_preflight = tool({
-      description:
-        'Surface a preflight readiness card and wait for user approval before publishing. ' +
-        'Call mcp__governance-agent__evaluate_page with the Live Preview URL first, map the results ' +
-        'into categories and checks, then call this tool with the structured payload. ' +
-        'The user will see the preflight card and must approve before proceeding.',
-      inputSchema: z.object({
-        title: z.string().describe('Document or page title being checked (≤ 10 words)'),
-        url: z.string().url().describe('Live Preview URL of the document'),
-        readiness: z
-          .number()
-          .int()
-          .min(0)
-          .max(100)
-          .describe('Overall readiness percentage (0–100) computed from governance results'),
-        categories: z
-          .array(
-            z.object({
-              name: z.string().describe('Category name'),
-              checks: z
-                .array(
-                  z.object({
-                    label: z.string().describe('Short check description'),
-                    passed: z.boolean().describe('Whether this check passed'),
-                  }),
-                )
-                .describe('Individual checks within this category'),
-            }),
-          )
-          .describe('Mapped from governance agent evaluate_page results'),
-        summary: z.string().optional().describe('One-sentence overall assessment'),
-      }),
-      needsApproval: async () => true,
-      execute: async () => ({ approved: true }),
-    });
-
     // Memory tools write to internal agent metadata paths — no user approval needed.
     tools.write_project_memory = tool({
       description:
