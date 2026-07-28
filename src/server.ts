@@ -1,11 +1,18 @@
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
-import { streamText, stepCountIs, type ModelMessage } from 'ai';
+import {
+  streamText,
+  stepCountIs,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type ModelMessage,
+} from 'ai';
 import { initTelemetry, flushTelemetry } from './telemetry.js';
 import { MCPClient } from './mcp/client.js';
 import {
   buildApprovalContinuationResponse,
   getNewlyResolvedToolOutputs,
   hasPendingApprovals,
+  unwrapToolOutput,
 } from './tool-approval.js';
 import {
   detectSessionUserPattern,
@@ -232,6 +239,11 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     return buildApprovalContinuationResponse(toolOutputs, CORS_HEADERS);
   }
 
+  // Tools approved this request are executed in resolveApprovals and injected as tool-results,
+  // so streamText treats them as prior context and never re-emits their output. Surface those
+  // outputs to the client (for tool cards) by merging them into the streamText UI stream below.
+  const newlyResolvedOutputs = getNewlyResolvedToolOutputs(messages, processedMessages);
+
   const withOrphanResults = ensureOrphanedToolResults(processedMessages);
   const strippedForModel = stripClientOnlyToolInputs(withOrphanResults);
   const sessionPattern = trailingAssistantAlreadySuggestedSkill(strippedForModel)
@@ -344,7 +356,26 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     },
   });
 
-  const streamResponse = result.toUIMessageStreamResponse();
+  // When tools were approved this request, prepend their outputs as tool-output-available
+  // events (unwrapped to the raw MCP shape the client renders) then merge the model stream.
+  // Otherwise emit the streamText response directly so the common path is unchanged.
+  const streamResponse = newlyResolvedOutputs.length
+    ? createUIMessageStreamResponse({
+        stream: createUIMessageStream({
+          execute: ({ writer }) => {
+            for (const { toolCallId, output } of newlyResolvedOutputs) {
+              writer.write({
+                type: 'tool-output-available',
+                toolCallId,
+                output: unwrapToolOutput(output),
+              });
+            }
+            writer.merge(result.toUIMessageStream());
+          },
+          onError: (error) => formatErrorForLog(error),
+        }),
+      })
+    : result.toUIMessageStreamResponse();
 
   const headers = new Headers(streamResponse.headers);
   for (const [key, value] of Object.entries(CORS_HEADERS)) {

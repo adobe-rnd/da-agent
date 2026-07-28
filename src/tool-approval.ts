@@ -60,6 +60,28 @@ export function getNewlyResolvedToolOutputs(
   return outputs;
 }
 
+const TOOL_OUTPUT_ENVELOPE_TYPES = new Set(['text', 'json', 'error-text']);
+
+/**
+ * resolveApprovals stores tool outputs as `{ type: 'json' | 'text' | 'error-text', value }`
+ * envelopes so the model sees a well-formed tool-result. The client, however, renders cards
+ * from the raw MCP output (a JSON string or object), matching what the AI SDK streams for
+ * inline tool executions. Unwrap the envelope back to that raw value before emitting it.
+ * Checking `type` against the known envelope tags (not just its presence) avoids mistaking
+ * genuine tool output that happens to have `type`/`value` keys for our own envelope.
+ */
+export function unwrapToolOutput(output: unknown): unknown {
+  if (
+    output &&
+    typeof output === 'object' &&
+    'value' in output &&
+    TOOL_OUTPUT_ENVELOPE_TYPES.has((output as Record<string, unknown>).type as string)
+  ) {
+    return (output as { value: unknown }).value;
+  }
+  return output;
+}
+
 export function buildApprovalContinuationResponse(
   toolOutputs: Array<{ toolCallId: string; output: unknown }>,
   corsHeaders: Record<string, string>,
@@ -70,7 +92,7 @@ export function buildApprovalContinuationResponse(
         writer.write({
           type: 'tool-output-available',
           toolCallId,
-          output,
+          output: unwrapToolOutput(output),
         });
       }
       writer.write({ type: 'finish', finishReason: 'stop' });
