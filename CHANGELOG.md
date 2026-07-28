@@ -1,3 +1,10 @@
+## [1.26.1](https://github.com/adobe-rnd/da-agent/compare/v1.26.0...v1.26.1) (2026-07-28)
+
+
+### Bug Fixes
+
+* trigger deployment ([#65](https://github.com/adobe-rnd/da-agent/issues/65)) ([01a9150](https://github.com/adobe-rnd/da-agent/commit/01a915021ba99292853b159dfb7330f4f215ae75))
+
 # [1.26.0](https://github.com/adobe-rnd/da-agent/compare/v1.25.2...v1.26.0) (2026-07-16)
 
 
