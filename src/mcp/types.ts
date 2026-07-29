@@ -25,12 +25,17 @@ export type MCPServerConfig = StdioMCPServerConfig | RemoteMCPServerConfig;
  * `sendImsToken` — forward the user's IMS Bearer token in the Authorization header.
  * `apiKey`       — static API key to send as x-api-key (omitted when undefined).
  * `instructions` — additional prompt instructions appended to the system prompt.
+ * `continuationApprovalPatterns` — glob patterns (e.g. `evaluate_*`) matched against
+ *   the bare MCP tool name. Matching tools run without pre-execution approval, then
+ *   pause the agentic loop after they finish so the user can review results and decide
+ *   whether to continue (post-execution "continuation approval" gate).
  */
 export interface BuiltInMCPServerConfig {
   type: 'http' | 'sse';
   url: string;
   sendImsToken?: boolean;
   instructions?: string;
+  continuationApprovalPatterns?: string[];
 }
 
 export function isStdioConfig(config: MCPServerConfig): config is StdioMCPServerConfig {

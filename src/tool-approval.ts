@@ -82,6 +82,43 @@ export function unwrapToolOutput(output: unknown): unknown {
   return output;
 }
 
+/** A `data-continuation` transient stream part driving the client's Continue/Stop prompt. */
+export interface ContinuationPart {
+  type: 'data-continuation';
+  transient: true;
+  data: { toolCallId: string; toolName: string };
+}
+
+interface StepLike {
+  toolCalls: Array<{ toolCallId: string; toolName: string }>;
+  toolResults: Array<{ toolCallId: string }>;
+}
+
+/**
+ * The transient continuation parts to emit for the given (final) step: one per
+ * continuation-gated tool that actually produced a result in this step. A gated tool
+ * with no result (e.g. it was itself pre-execution-paused and never ran) is skipped so
+ * we never prompt "continue?" for a tool that hasn't finished.
+ */
+export function buildContinuationParts(
+  lastStep: StepLike | undefined,
+  requiresContinuationApproval: (toolName: string) => boolean,
+): ContinuationPart[] {
+  if (!lastStep) return [];
+  const resultIds = new Set(lastStep.toolResults.map((r) => r.toolCallId));
+  const parts: ContinuationPart[] = [];
+  for (const tc of lastStep.toolCalls) {
+    if (requiresContinuationApproval(tc.toolName) && resultIds.has(tc.toolCallId)) {
+      parts.push({
+        type: 'data-continuation',
+        transient: true,
+        data: { toolCallId: tc.toolCallId, toolName: tc.toolName },
+      });
+    }
+  }
+  return parts;
+}
+
 export function buildApprovalContinuationResponse(
   toolOutputs: Array<{ toolCallId: string; output: unknown }>,
   corsHeaders: Record<string, string>,

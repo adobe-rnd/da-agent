@@ -33,4 +33,9 @@ describe('getBuiltInMcpServers', () => {
     );
     expect(servers['governance-agent'].url).toBe('http://localhost:8000/mcp/');
   });
+
+  it('gates evaluate_* tools behind a post-execution continuation approval', () => {
+    const servers = getBuiltInMcpServers(envWith());
+    expect(servers['governance-agent'].continuationApprovalPatterns).toEqual(['evaluate_*']);
+  });
 });

@@ -10,6 +10,7 @@ import { initTelemetry, flushTelemetry } from './telemetry.js';
 import { MCPClient } from './mcp/client.js';
 import {
   buildApprovalContinuationResponse,
+  buildContinuationParts,
   getNewlyResolvedToolOutputs,
   hasPendingApprovals,
   unwrapToolOutput,
@@ -215,6 +216,14 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
   const { allTools, mcpClients, mcpConfig, mcpErrors, generatedToolsIndex, builtInServers } =
     assembled;
 
+  // A tool declares a post-execution "continuation approval" gate via
+  // providerOptions.daAgent.continuationApproval (built-in tools set it inline;
+  // MCP tools get it during adaptation when they match a server pattern). When such
+  // a tool runs we halt the agentic loop after its result and prompt the user to
+  // continue — the LLM never decides whether to pause.
+  const requiresContinuationApproval = (toolName: string): boolean =>
+    allTools[toolName]?.providerOptions?.daAgent?.continuationApproval === true;
+
   console.log(`[da-agent:perf] early=${t1 - t0}ms parallel=${t2 - t1}ms pre-stream=${t2 - t0}ms`);
 
   const { messages, requestedSkills, imsToken, attachments = [], sessionId } = parsed.data;
@@ -342,7 +351,15 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     system: systemPrompt,
     messages: modelMessages as ModelMessage[],
     tools: allTools,
-    stopWhen: stepCountIs(5),
+    // Halt after the normal step budget OR immediately after a step that ran a
+    // continuation-gated tool, so the user can review results before continuing.
+    stopWhen: [
+      stepCountIs(5),
+      ({ steps }) => {
+        const last = steps.at(-1);
+        return !!last?.toolCalls?.some((tc) => requiresContinuationApproval(tc.toolName));
+      },
+    ],
     experimental_telemetry: {
       isEnabled: true,
       functionId: 'da-agent-chat',
@@ -356,26 +373,47 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     },
   });
 
-  // When tools were approved this request, prepend their outputs as tool-output-available
-  // events (unwrapped to the raw MCP shape the client renders) then merge the model stream.
-  // Otherwise emit the streamText response directly so the common path is unchanged.
-  const streamResponse = newlyResolvedOutputs.length
-    ? createUIMessageStreamResponse({
-        stream: createUIMessageStream({
-          execute: ({ writer }) => {
-            for (const { toolCallId, output } of newlyResolvedOutputs) {
-              writer.write({
-                type: 'tool-output-available',
-                toolCallId,
-                output: unwrapToolOutput(output),
-              });
-            }
-            writer.merge(result.toUIMessageStream());
-          },
-          onError: (error) => formatErrorForLog(error),
-        }),
-      })
-    : result.toUIMessageStreamResponse();
+  // Build the UI stream manually so we can (a) prepend outputs of tools approved this
+  // request as tool-output-available events (unwrapped to the raw MCP shape the client
+  // renders) and (b) emit a transient `data-continuation` part after the model stream for
+  // any continuation-gated tool that just ran, while holding the terminal `finish` chunk
+  // so the ordering is `…tool-output-available, data-continuation, finish`. The transient
+  // part is delivered to the client but never merged into message history.
+  const streamResponse = createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: async ({ writer }) => {
+        for (const { toolCallId, output } of newlyResolvedOutputs) {
+          writer.write({
+            type: 'tool-output-available',
+            toolCallId,
+            output: unwrapToolOutput(output),
+          });
+        }
+
+        const reader = result.toUIMessageStream().getReader();
+        let finishChunk: Awaited<ReturnType<typeof reader.read>>['value'] | null = null;
+        for (;;) {
+          // eslint-disable-next-line no-await-in-loop -- sequential stream consumption
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value.type === 'finish') {
+            finishChunk = value;
+          } else {
+            writer.write(value);
+          }
+        }
+
+        const continuationParts = buildContinuationParts(
+          (await result.steps).at(-1),
+          requiresContinuationApproval,
+        );
+        for (const part of continuationParts) writer.write(part);
+
+        if (finishChunk) writer.write(finishChunk);
+      },
+      onError: (error) => formatErrorForLog(error),
+    }),
+  });
 
   const headers = new Headers(streamResponse.headers);
   for (const [key, value] of Object.entries(CORS_HEADERS)) {

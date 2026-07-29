@@ -99,6 +99,7 @@ export async function assembleTools(
   }
 
   const builtInServers = getBuiltInMcpServers(env);
+  const continuationApprovalPatterns: Record<string, string[]> = {};
 
   for (const [id, builtIn] of Object.entries(builtInServers)) {
     const headers: Record<string, string> = {};
@@ -111,6 +112,9 @@ export async function assembleTools(
       url: builtIn.url,
       ...(Object.keys(headers).length > 0 ? { headers } : {}),
     };
+    if (builtIn.continuationApprovalPatterns?.length) {
+      continuationApprovalPatterns[id] = builtIn.continuationApprovalPatterns;
+    }
   }
 
   const mcpConfig =
@@ -118,6 +122,7 @@ export async function assembleTools(
       ? {
           mcpServers: allMcpServers,
           toolAllowPatterns: Object.keys(allMcpServers).map((id) => `mcp__${id}__*`),
+          continuationApprovalPatterns,
         }
       : null;
 

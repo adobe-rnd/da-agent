@@ -24,6 +24,10 @@ export function getBuiltInMcpServers(env: Env): Record<string, BuiltInMCPServerC
       url: governanceUrl,
       sendImsToken: true,
       instructions: GOVERNANCE_AGENT_INSTRUCTIONS,
+      // evaluate_* tools produce reports the user should review before the agent
+      // continues (e.g. mid-skill, before preview/publish). Gate them with a
+      // post-execution continuation prompt instead of a pre-execution approval.
+      continuationApprovalPatterns: ['evaluate_*'],
     },
   };
 }
