@@ -113,9 +113,7 @@ export function mcpToolToAITool(
     mcpTool.inputSchema as Record<string, unknown> | undefined,
   );
 
-  // Continuation-gated tools run WITHOUT pre-execution approval and instead pause
-  // the agentic loop after they finish (see server.ts). Skipping the pre-exec gate
-  // here avoids a double prompt (approve-to-run AND approve-to-continue).
+  // Continuation-gated tools pause the agentic loop after they finish (see server.ts),
   const isContinuationGated = matchesAnyGlob(mcpTool.name, continuationApprovalPatterns);
 
   return {
@@ -133,9 +131,10 @@ export function mcpToolToAITool(
       // fact that annotations are optional, we gate unless the tool tells us it
       // is safe: skip approval only when it is read-only OR explicitly
       // non-destructive. Everything else — including unannotated tools —
-      // requires approval. Continuation-gated tools opt out (post-exec gate instead).
+      // requires approval. This is independent of continuation gating: a tool
+      // can require both pre-execution approval and post-execution continuation
+      // approval.
       needsApproval: async () => {
-        if (isContinuationGated) return false;
         const { readOnlyHint, destructiveHint } = mcpTool.annotations ?? {};
         return readOnlyHint !== true && destructiveHint !== false;
       },

@@ -60,7 +60,7 @@ describe('matchesGlob', () => {
 });
 
 describe('mcpToolToAITool continuation approval', () => {
-  it('flags a matching tool for continuation approval and skips pre-exec approval', async () => {
+  it('flags a matching tool for continuation approval independently of pre-exec approval', async () => {
     const { tool: aiTool } = mcpToolToAITool(
       'governance-agent',
       { name: 'evaluate_page' },
@@ -68,9 +68,10 @@ describe('mcpToolToAITool continuation approval', () => {
       ['evaluate_*'],
     );
     expect(continuationFlag(aiTool)).toBe(true);
-    // Even though it is unannotated (would otherwise fail-closed to true), the
-    // continuation gate suppresses the pre-execution approval to avoid a double prompt.
-    expect(await aiTool.needsApproval?.({}, { toolCallId: 'x', messages: [] })).toBe(false);
+    // Continuation gating and pre-execution approval are independent: this
+    // unannotated tool still fails closed on the pre-exec gate while also being
+    // continuation-gated, so it can be both pre-gated and post-gated.
+    expect(await aiTool.needsApproval?.({}, { toolCallId: 'x', messages: [] })).toBe(true);
   });
 
   it('does not flag a non-matching tool and keeps annotation-based gating', async () => {
