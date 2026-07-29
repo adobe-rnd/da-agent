@@ -1,3 +1,10 @@
+# [1.27.0](https://github.com/adobe-rnd/da-agent/compare/v1.26.1...v1.27.0) (2026-07-29)
+
+
+### Features
+
+* **mcp:** allow list preview deployments of ABV MCP Server to work with EW ([6a34d87](https://github.com/adobe-rnd/da-agent/commit/6a34d874960f30c1c16c36db18f9afda3b9a4254))
+
 ## [1.26.1](https://github.com/adobe-rnd/da-agent/compare/v1.26.0...v1.26.1) (2026-07-28)
 
 
