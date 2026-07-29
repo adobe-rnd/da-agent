@@ -1,3 +1,10 @@
+## [1.27.1](https://github.com/adobe-rnd/da-agent/compare/v1.27.0...v1.27.1) (2026-07-29)
+
+
+### Bug Fixes
+
+* add Nerve Center Prod domain to trusted MCP domains ([971f502](https://github.com/adobe-rnd/da-agent/commit/971f502f9082cc9fc3c967a4a09a7254ba0b838b))
+
 # [1.27.0](https://github.com/adobe-rnd/da-agent/compare/v1.26.1...v1.27.0) (2026-07-29)
 
 
