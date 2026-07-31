@@ -1,162 +1,181 @@
 /**
- * Pre-LLM message transforms: approval resolution, client-only key stripping,
+ * Pre-LLM message transforms for the v2 approval protocol: approval
+ * reconciliation, v2→model-message conversion, client-only key stripping,
  * selection-context expansion, and attachment metadata injection.
+ *
+ * The client↔agent wire contract lives in da-nx/docs/approval-protocol.md.
+ * Incoming assistant messages carry `type: 'tool'` parts whose lifecycle
+ * `state` is the single key we reconcile on (never message position).
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+export const TOOL_STATE = {
+  INPUT_AVAILABLE: 'input-available',
+  AWAITING_APPROVAL: 'awaiting-approval',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  OUTPUT_AVAILABLE: 'output-available',
+  OUTPUT_ERROR: 'output-error',
+} as const;
+
+const REJECTION_MESSAGE = 'Action rejected by user.';
+
+const isToolPart = (p: any) => p?.type === 'tool';
+const partHasResult = (p: any) =>
+  p.state === TOOL_STATE.OUTPUT_AVAILABLE || p.state === TOOL_STATE.OUTPUT_ERROR;
+
+function wrapOutput(raw: any): { type: 'text' | 'json'; value: any } {
+  return typeof raw === 'string'
+    ? { type: 'text', value: raw }
+    : { type: 'json', value: raw ?? null };
+}
+
+export interface ExecutedOutput {
+  toolCallId: string;
+  output?: unknown;
+  errorText?: string;
+  isError: boolean;
+}
+
 /**
- * Resolve tool-approval-response messages into standard tool-result messages
- * so that streamText receives clean history.
- *
- * 1. Build a lookup of approvalId → tool metadata from assistant messages.
- * 2. Determine which approval-responses are "fresh" (appended by the client
- *    in this request) vs "stale" (processed in a prior request). Fresh ones
- *    sit after the last assistant/user message; stale ones have the LLM's
- *    continuation after them.
- * 3. Fresh approvals are executed; stale ones get a synthetic result.
- * 4. Strips tool-approval-request parts from assistant messages.
+ * Reconcile the v2 history before the model runs: execute every tool part the
+ * user approved that has no result yet, **sequentially** (deterministic
+ * ordering, no races on da-admin/collab — see approval-protocol.md §7), and
+ * attach each result back onto its part. Rejections are left as-is here (they
+ * carry no execution) and become a rejection tool-result at model-conversion
+ * time. Returns the updated messages plus the outputs to stream to the client
+ * so it can move each approved card to its result state.
  */
 /* eslint-disable no-await-in-loop */
-export async function resolveApprovals(
+export async function reconcileApprovals(
   messages: any[],
   daTools: Record<string, any>,
-): Promise<any[]> {
-  const result: any[] = messages.map((m) => ({
-    ...m,
-    content: Array.isArray(m.content) ? [...m.content] : m.content,
-  }));
-
-  const approvalMeta = new Map<
-    string,
-    {
-      toolCallId: string;
-      toolName: string;
-      args: any;
-      msgIdx: number;
-    }
-  >();
-  for (let i = 0; i < result.length; i += 1) {
-    const msg = result[i];
-    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-      for (const part of msg.content) {
-        if (part.type === 'tool-approval-request') {
-          const call = msg.content.find(
-            (p: any) => p.type === 'tool-call' && p.toolCallId === part.toolCallId,
-          );
-          if (call) {
-            approvalMeta.set(part.approvalId, {
-              toolCallId: part.toolCallId,
-              toolName: call.toolName,
-              args: call.input,
-              msgIdx: i,
-            });
-          }
-        }
+): Promise<{ messages: any[]; executedOutputs: ExecutedOutput[] }> {
+  const toExecute: any[] = [];
+  messages.forEach((msg) => {
+    if (msg.role !== 'assistant' || !Array.isArray(msg.content)) return;
+    msg.content.forEach((p: any) => {
+      if (isToolPart(p) && p.state === TOOL_STATE.APPROVED && !partHasResult(p)) {
+        toExecute.push(p);
       }
+    });
+  });
+
+  const executedOutputs: ExecutedOutput[] = [];
+  const resultsById = new Map<string, any>();
+
+  for (const part of toExecute) {
+    const tool = daTools[part.toolName];
+    if (!tool?.execute) {
+      const errorText = `No executable tool: ${part.toolName}`;
+      resultsById.set(part.toolCallId, { state: TOOL_STATE.OUTPUT_ERROR, errorText });
+      executedOutputs.push({ toolCallId: part.toolCallId, isError: true, errorText });
+      // eslint-disable-next-line no-continue
+      continue;
+    }
+    try {
+      const cleanArgs = stripClientOnlyFromArgs(part.input);
+      const output = await tool.execute(cleanArgs, { toolCallId: part.toolCallId, messages: [] });
+      resultsById.set(part.toolCallId, { state: TOOL_STATE.OUTPUT_AVAILABLE, output });
+      executedOutputs.push({ toolCallId: part.toolCallId, output, isError: false });
+    } catch (e) {
+      const errorText = e instanceof Error ? e.message : String(e);
+      resultsById.set(part.toolCallId, { state: TOOL_STATE.OUTPUT_ERROR, errorText });
+      executedOutputs.push({ toolCallId: part.toolCallId, isError: true, errorText });
     }
   }
 
-  if (approvalMeta.size === 0) return result;
+  if (resultsById.size === 0) return { messages, executedOutputs };
 
-  let lastConversationIdx = -1;
-  for (let i = result.length - 1; i >= 0; i -= 1) {
-    if (result[i].role === 'assistant' || result[i].role === 'user') {
-      lastConversationIdx = i;
-      break;
-    }
-  }
-
-  for (let i = 0; i < result.length; i += 1) {
-    const msg = result[i];
-    if (msg.role === 'tool' && Array.isArray(msg.content)) {
-      const resp = msg.content.find((p: any) => p.type === 'tool-approval-response');
-      if (resp) {
-        const meta = approvalMeta.get(resp.approvalId);
-        if (meta) {
-          const { toolCallId, toolName, args, msgIdx } = meta;
-
-          result[msgIdx].content = result[msgIdx].content.filter(
-            (p: any) => !(p.type === 'tool-approval-request' && p.approvalId === resp.approvalId),
-          );
-
-          const alreadyResolved = result.some(
-            (m) =>
-              m.role === 'tool' &&
-              Array.isArray(m.content) &&
-              m.content.some((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId),
-          );
-          if (alreadyResolved) {
-            // eslint-disable-next-line no-continue
-            continue;
-          }
-
-          if (i < lastConversationIdx) {
-            result[i] = {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId,
-                  toolName,
-                  output: resp.approved
-                    ? { type: 'text' as const, value: '(previously executed)' }
-                    : { type: 'json' as const, value: { message: 'Action rejected by user.' } },
-                },
-              ],
-            };
-          } else {
-            let output: any;
-            if (resp.approved && daTools[toolName]?.execute) {
-              try {
-                const cleanArgs = stripClientOnlyFromArgs(args);
-                output = await daTools[toolName].execute(cleanArgs, { toolCallId, messages: [] });
-              } catch (e) {
-                output = { error: String(e) };
-              }
-            } else {
-              output = { message: 'Action rejected by user.' };
-            }
-
-            result[i] = {
-              role: 'tool',
-              content: [
-                {
-                  type: 'tool-result',
-                  toolCallId,
-                  toolName,
-                  output:
-                    typeof output === 'string'
-                      ? { type: 'text', value: output }
-                      : { type: 'json', value: output },
-                },
-              ],
-            };
-          }
-        }
-      }
-    }
-  }
-
-  return result;
+  const out = messages.map((msg) => {
+    if (msg.role !== 'assistant' || !Array.isArray(msg.content)) return msg;
+    const touched = msg.content.some((p: any) => isToolPart(p) && resultsById.has(p.toolCallId));
+    if (!touched) return msg;
+    const content = msg.content.map((p: any) =>
+      isToolPart(p) && resultsById.has(p.toolCallId)
+        ? { ...p, ...resultsById.get(p.toolCallId) }
+        : p,
+    );
+    return { ...msg, content };
+  });
+  return { messages: out, executedOutputs };
 }
 /* eslint-enable no-await-in-loop */
 
 /**
+ * Convert v2 wire messages into provider ModelMessages. Each `type: 'tool'`
+ * part expands into an assistant `tool-call` and, when it has a settled state,
+ * a `tool` role `tool-result`:
+ *   - output-available → the tool output
+ *   - output-error     → an error-text result
+ *   - rejected         → a "rejected by user" result (so the tool_use isn't orphaned)
+ * Parts with no result yet (should not occur after reconcileApprovals) are left
+ * unresolved for ensureOrphanedToolResults to backfill. Client-only `_da*` keys
+ * are stripped from tool inputs here.
+ */
+export function toModelMessages(messages: any[]): any[] {
+  const out: any[] = [];
+  messages.forEach((msg) => {
+    if (msg.role === 'user') {
+      out.push(msg);
+      return;
+    }
+    if (msg.role !== 'assistant') return;
+    if (typeof msg.content === 'string') {
+      out.push({ role: 'assistant', content: msg.content });
+      return;
+    }
+    if (!Array.isArray(msg.content)) {
+      out.push(msg);
+      return;
+    }
+
+    const assistantContent: any[] = [];
+    const toolResults: any[] = [];
+    msg.content.forEach((part: any) => {
+      if (part.type === 'text') {
+        assistantContent.push({ type: 'text', text: part.text });
+        return;
+      }
+      if (!isToolPart(part)) return;
+      assistantContent.push({
+        type: 'tool-call',
+        toolCallId: part.toolCallId,
+        toolName: part.toolName,
+        input: stripClientOnlyFromArgs(part.input),
+      });
+      let output: any;
+      if (part.state === TOOL_STATE.OUTPUT_AVAILABLE) output = wrapOutput(part.output);
+      else if (part.state === TOOL_STATE.OUTPUT_ERROR) {
+        output = { type: 'error-text', value: part.errorText ?? 'Tool error' };
+      } else if (part.state === TOOL_STATE.REJECTED) {
+        output = { type: 'json', value: { message: REJECTION_MESSAGE } };
+      }
+      if (output !== undefined) {
+        toolResults.push({
+          type: 'tool-result',
+          toolCallId: part.toolCallId,
+          toolName: part.toolName,
+          output,
+        });
+      }
+    });
+
+    if (assistantContent.length) out.push({ role: 'assistant', content: assistantContent });
+    if (toolResults.length) out.push({ role: 'tool', content: toolResults });
+  });
+  return out;
+}
+
+/**
  * Ensure every assistant tool-call has a matching tool-result.
  *
- * Orphaned tool-calls appear when:
- *  - The streamText step-limit fires mid-tool-execution, so the model emitted
- *    a tool_use but the SDK never appended a tool_result before stopping.
- *  - The client strips virtual (non-approval) tool results from history.
- *
- * Any unmatched tool-call gets a synthetic error result injected right after
- * its assistant message so the Anthropic/Bedrock API never sees a tool_use
- * without a corresponding tool_result.
- *
- * Counterpart: the client-side `stripOrphanedToolCallMessages` in da-nx
- * drops orphan assistant messages entirely before POSTing; this server-side
- * function injects results so the model sees an explicit failure.
+ * Orphaned tool-calls appear when the streamText step-limit fires
+ * mid-tool-execution, so the model emitted a tool_use but the SDK never
+ * appended a tool_result before stopping. Any unmatched tool-call gets a
+ * synthetic error result injected right after its assistant message so the
+ * Anthropic/Bedrock API never sees a tool_use without a tool_result.
  */
 export function ensureOrphanedToolResults(messages: any[]): any[] {
   const resolved = new Set<string>();

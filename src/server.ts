@@ -1,12 +1,13 @@
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
-import { streamText, stepCountIs, type ModelMessage } from 'ai';
+import {
+  streamText,
+  stepCountIs,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
+  type ModelMessage,
+} from 'ai';
 import { initTelemetry, flushTelemetry } from './telemetry.js';
 import { MCPClient } from './mcp/client.js';
-import {
-  buildApprovalContinuationResponse,
-  getNewlyResolvedToolOutputs,
-  hasPendingApprovals,
-} from './tool-approval.js';
 import {
   detectSessionUserPattern,
   trailingAssistantAlreadySuggestedSkill,
@@ -20,8 +21,8 @@ import { CORS_HEADERS, DA_OAUTH_CLIENT_ID, extractImsUserId } from './auth.js';
 import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
 import { resolveMcpFetcher } from './mcp/service-bindings.js';
 import {
-  resolveApprovals,
-  stripClientOnlyToolInputs,
+  reconcileApprovals,
+  toModelMessages,
   ensureOrphanedToolResults,
   expandUserSelectionContextForModel,
   expandLatestUserAttachmentsForModel,
@@ -219,22 +220,17 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     });
   };
 
-  const processedMessages = await resolveApprovals(messages, allTools);
+  // Reconcile the v2 approval history: execute approved tools (sequentially),
+  // attach their results, and collect outputs to stream back to the client.
+  const { messages: reconciled, executedOutputs } = await reconcileApprovals(messages, allTools);
 
-  if (hasPendingApprovals(processedMessages)) {
-    const toolOutputs = getNewlyResolvedToolOutputs(messages, processedMessages);
-    cleanupMCP();
-    ctx.collab?.disconnect();
-    await flushTelemetry();
-    return buildApprovalContinuationResponse(toolOutputs, CORS_HEADERS);
-  }
-
-  const withOrphanResults = ensureOrphanedToolResults(processedMessages);
-  const strippedForModel = stripClientOnlyToolInputs(withOrphanResults);
-  const sessionPattern = trailingAssistantAlreadySuggestedSkill(strippedForModel)
+  // Session-pattern detection runs on the original (unexpanded) user text.
+  const modelForPattern = toModelMessages(reconciled);
+  const sessionPattern = trailingAssistantAlreadySuggestedSkill(modelForPattern)
     ? null
-    : detectSessionUserPattern(strippedForModel);
-  const withSelectionContext = expandUserSelectionContextForModel(strippedForModel);
+    : detectSessionUserPattern(modelForPattern);
+
+  const withSelectionContext = expandUserSelectionContextForModel(reconciled);
   const attachmentMeta = attachments.map((a) => ({
     id: a.id,
     fileName: a.fileName,
@@ -243,7 +239,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
     ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
   }));
-  const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
+  const withAttachments = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
+  const modelMessages = ensureOrphanedToolResults(toModelMessages(withAttachments));
 
   // Auto-compact: check token usage against threshold, inject skill + tool if triggered.
   const compactThreshold = resolveCompactThreshold(env.COMPACT_THRESHOLD_OVERRIDE);
@@ -299,49 +296,76 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     apiKey: env.AWS_BEARER_TOKEN_BEDROCK,
   });
 
-  const result = streamText({
-    model: bedrock('global.anthropic.claude-sonnet-4-6'),
-    onError: (error) => {
-      console.error('[da-agent] streamText error:', formatErrorForLog(error));
-
-      // Diagnostic: capture full payload when the Anthropic API rejects orphaned tool_use
-      // blocks. This should be rare (the defensive ensureOrphanedToolResults pipeline step
-      // injects synthetic results) but if it ever fires we want the exact messages array
-      // to write a deterministic regression test.
-      const errMsg = error instanceof Error ? error.message : String(error);
-      if (errMsg.includes('tool_use') && errMsg.includes('tool_result')) {
-        console.error(
-          '[da-agent] orphaned tool_use slipped past pipeline — modelMessages:\n',
-          JSON.stringify(modelMessages, null, 2),
-        );
+  const stream = createUIMessageStream({
+    execute: ({ writer }) => {
+      // Stream results for tools the user approved this round so the client can
+      // move each approved card to its result state, before the model continues.
+      for (const o of executedOutputs) {
+        if (o.isError) {
+          writer.write({
+            type: 'tool-output-error',
+            toolCallId: o.toolCallId,
+            errorText: o.errorText ?? 'Tool error',
+          });
+        } else {
+          writer.write({
+            type: 'tool-output-available',
+            toolCallId: o.toolCallId,
+            output: o.output,
+          });
+        }
       }
 
-      ctx.collab?.disconnect();
-      cleanupMCP();
+      const result = streamText({
+        model: bedrock('global.anthropic.claude-sonnet-4-6'),
+        onError: (error) => {
+          console.error('[da-agent] streamText error:', formatErrorForLog(error));
+
+          // Diagnostic: capture full payload when the Anthropic API rejects orphaned
+          // tool_use blocks. This should be rare (ensureOrphanedToolResults injects
+          // synthetic results) but if it fires we want the exact messages array.
+          const errMsg = error instanceof Error ? error.message : String(error);
+          if (errMsg.includes('tool_use') && errMsg.includes('tool_result')) {
+            console.error(
+              '[da-agent] orphaned tool_use slipped past pipeline — modelMessages:\n',
+              JSON.stringify(modelMessages, null, 2),
+            );
+          }
+
+          ctx.collab?.disconnect();
+          cleanupMCP();
+        },
+        onFinish: async () => {
+          await flushTelemetry();
+          ctx.collab?.disconnect();
+          cleanupMCP();
+        },
+        system: systemPrompt,
+        messages: modelMessages as ModelMessage[],
+        tools: allTools,
+        stopWhen: stepCountIs(5),
+        experimental_telemetry: {
+          isEnabled: true,
+          functionId: 'da-agent-chat',
+          metadata: {
+            userId: extractImsUserId(imsToken) ?? 'unknown',
+            org: ctx.pageContext?.org ?? 'unknown',
+            site: ctx.pageContext?.site ?? 'unknown',
+            path: ctx.pageContext?.path ?? 'unknown',
+            sessionId: sessionId ?? 'unknown',
+          },
+        },
+      });
+
+      writer.merge(result.toUIMessageStream());
     },
-    onFinish: async () => {
-      await flushTelemetry();
-      ctx.collab?.disconnect();
-      cleanupMCP();
-    },
-    system: systemPrompt,
-    messages: modelMessages as ModelMessage[],
-    tools: allTools,
-    stopWhen: stepCountIs(5),
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: 'da-agent-chat',
-      metadata: {
-        userId: extractImsUserId(imsToken) ?? 'unknown',
-        org: ctx.pageContext?.org ?? 'unknown',
-        site: ctx.pageContext?.site ?? 'unknown',
-        path: ctx.pageContext?.path ?? 'unknown',
-        sessionId,
-      },
+    onError: (error) => {
+      console.error('[da-agent] stream error:', formatErrorForLog(error));
+      return 'The agent encountered an error.';
     },
   });
 
-  const streamResponse = result.toUIMessageStreamResponse();
+  const streamResponse = createUIMessageStreamResponse({ stream });
 
   const headers = new Headers(streamResponse.headers);
   for (const [key, value] of Object.entries(CORS_HEADERS)) {
