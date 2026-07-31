@@ -1,3 +1,10 @@
+## [1.27.2](https://github.com/adobe-rnd/da-agent/compare/v1.27.1...v1.27.2) (2026-07-31)
+
+
+### Bug Fixes
+
+* **approvals:** reconcile batched tool approvals; remove custom flow ([a3e4081](https://github.com/adobe-rnd/da-agent/commit/a3e40819bcbf855ef096e6f6eab34fe269b72bbd))
+
 ## [1.27.1](https://github.com/adobe-rnd/da-agent/compare/v1.27.0...v1.27.1) (2026-07-29)
 
 
