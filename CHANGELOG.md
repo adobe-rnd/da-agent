@@ -1,3 +1,31 @@
+## [1.27.2](https://github.com/adobe-rnd/da-agent/compare/v1.27.1...v1.27.2) (2026-07-31)
+
+
+### Bug Fixes
+
+* **approvals:** reconcile batched tool approvals; remove custom flow ([a3e4081](https://github.com/adobe-rnd/da-agent/commit/a3e40819bcbf855ef096e6f6eab34fe269b72bbd))
+
+## [1.27.1](https://github.com/adobe-rnd/da-agent/compare/v1.27.0...v1.27.1) (2026-07-29)
+
+
+### Bug Fixes
+
+* add Nerve Center Prod domain to trusted MCP domains ([971f502](https://github.com/adobe-rnd/da-agent/commit/971f502f9082cc9fc3c967a4a09a7254ba0b838b))
+
+# [1.27.0](https://github.com/adobe-rnd/da-agent/compare/v1.26.1...v1.27.0) (2026-07-29)
+
+
+### Features
+
+* **mcp:** allow list preview deployments of ABV MCP Server to work with EW ([6a34d87](https://github.com/adobe-rnd/da-agent/commit/6a34d874960f30c1c16c36db18f9afda3b9a4254))
+
+## [1.26.1](https://github.com/adobe-rnd/da-agent/compare/v1.26.0...v1.26.1) (2026-07-28)
+
+
+### Bug Fixes
+
+* trigger deployment ([#65](https://github.com/adobe-rnd/da-agent/issues/65)) ([01a9150](https://github.com/adobe-rnd/da-agent/commit/01a915021ba99292853b159dfb7330f4f215ae75))
+
 # [1.26.0](https://github.com/adobe-rnd/da-agent/compare/v1.25.2...v1.26.0) (2026-07-16)
 
 

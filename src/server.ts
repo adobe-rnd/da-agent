@@ -9,13 +9,6 @@ import {
 import { initTelemetry, flushTelemetry } from './telemetry.js';
 import { MCPClient } from './mcp/client.js';
 import {
-  buildApprovalContinuationResponse,
-  buildContinuationParts,
-  getNewlyResolvedToolOutputs,
-  hasPendingApprovals,
-  unwrapToolOutput,
-} from './tool-approval.js';
-import {
   detectSessionUserPattern,
   trailingAssistantAlreadySuggestedSkill,
 } from './user-message-pattern.js';
@@ -28,11 +21,12 @@ import { CORS_HEADERS, DA_OAUTH_CLIENT_ID, extractImsUserId } from './auth.js';
 import { parseTrustedDomains, isUrlTrustedForToken } from './mcp/token-allowlist.js';
 import { resolveMcpFetcher } from './mcp/service-bindings.js';
 import {
-  resolveApprovals,
-  stripClientOnlyToolInputs,
+  reconcileApprovals,
+  toModelMessages,
   ensureOrphanedToolResults,
   expandUserSelectionContextForModel,
   expandLatestUserAttachmentsForModel,
+  buildContinuationParts,
 } from './message-pipeline.js';
 import { buildSystemPrompt } from './prompt-builder.js';
 import { buildEarlyChatContext, resolveAsyncContext } from './chat-context.js';
@@ -238,27 +232,17 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     });
   };
 
-  const processedMessages = await resolveApprovals(messages, allTools);
+  // Reconcile the v2 approval history: execute approved tools (sequentially),
+  // attach their results, and collect outputs to stream back to the client.
+  const { messages: reconciled, executedOutputs } = await reconcileApprovals(messages, allTools);
 
-  if (hasPendingApprovals(processedMessages)) {
-    const toolOutputs = getNewlyResolvedToolOutputs(messages, processedMessages);
-    cleanupMCP();
-    ctx.collab?.disconnect();
-    await flushTelemetry();
-    return buildApprovalContinuationResponse(toolOutputs, CORS_HEADERS);
-  }
-
-  // Tools approved this request are executed in resolveApprovals and injected as tool-results,
-  // so streamText treats them as prior context and never re-emits their output. Surface those
-  // outputs to the client (for tool cards) by merging them into the streamText UI stream below.
-  const newlyResolvedOutputs = getNewlyResolvedToolOutputs(messages, processedMessages);
-
-  const withOrphanResults = ensureOrphanedToolResults(processedMessages);
-  const strippedForModel = stripClientOnlyToolInputs(withOrphanResults);
-  const sessionPattern = trailingAssistantAlreadySuggestedSkill(strippedForModel)
+  // Session-pattern detection runs on the original (unexpanded) user text.
+  const modelForPattern = toModelMessages(reconciled);
+  const sessionPattern = trailingAssistantAlreadySuggestedSkill(modelForPattern)
     ? null
-    : detectSessionUserPattern(strippedForModel);
-  const withSelectionContext = expandUserSelectionContextForModel(strippedForModel);
+    : detectSessionUserPattern(modelForPattern);
+
+  const withSelectionContext = expandUserSelectionContextForModel(reconciled);
   const attachmentMeta = attachments.map((a) => ({
     id: a.id,
     fileName: a.fileName,
@@ -267,7 +251,8 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     ...(typeof a.sizeBytes === 'number' ? { sizeBytes: a.sizeBytes } : {}),
     ...(a.contentUrl ? { contentUrl: a.contentUrl } : {}),
   }));
-  const modelMessages = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
+  const withAttachments = expandLatestUserAttachmentsForModel(withSelectionContext, attachmentMeta);
+  const modelMessages = ensureOrphanedToolResults(toModelMessages(withAttachments));
 
   // Auto-compact: check token usage against threshold, inject skill + tool if triggered.
   const compactThreshold = resolveCompactThreshold(env.COMPACT_THRESHOLD_OVERRIDE);
@@ -323,97 +308,109 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     apiKey: env.AWS_BEARER_TOKEN_BEDROCK,
   });
 
-  const result = streamText({
-    model: bedrock('global.anthropic.claude-sonnet-4-6'),
-    onError: (error) => {
-      console.error('[da-agent] streamText error:', formatErrorForLog(error));
-
-      // Diagnostic: capture full payload when the Anthropic API rejects orphaned tool_use
-      // blocks. This should be rare (the defensive ensureOrphanedToolResults pipeline step
-      // injects synthetic results) but if it ever fires we want the exact messages array
-      // to write a deterministic regression test.
-      const errMsg = error instanceof Error ? error.message : String(error);
-      if (errMsg.includes('tool_use') && errMsg.includes('tool_result')) {
-        console.error(
-          '[da-agent] orphaned tool_use slipped past pipeline — modelMessages:\n',
-          JSON.stringify(modelMessages, null, 2),
-        );
-      }
-
-      ctx.collab?.disconnect();
-      cleanupMCP();
-    },
-    onFinish: async () => {
-      await flushTelemetry();
-      ctx.collab?.disconnect();
-      cleanupMCP();
-    },
-    system: systemPrompt,
-    messages: modelMessages as ModelMessage[],
-    tools: allTools,
-    // Halt after the normal step budget OR immediately after a step that ran a
-    // continuation-gated tool, so the user can review results before continuing.
-    stopWhen: [
-      stepCountIs(5),
-      ({ steps }) => {
-        const last = steps.at(-1);
-        return !!last?.toolCalls?.some((tc) => requiresContinuationApproval(tc.toolName));
-      },
-    ],
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: 'da-agent-chat',
-      metadata: {
-        userId: extractImsUserId(imsToken) ?? 'unknown',
-        org: ctx.pageContext?.org ?? 'unknown',
-        site: ctx.pageContext?.site ?? 'unknown',
-        path: ctx.pageContext?.path ?? 'unknown',
-        sessionId,
-      },
-    },
-  });
-
-  // Build the UI stream manually so we can (a) prepend outputs of tools approved this
-  // request as tool-output-available events (unwrapped to the raw MCP shape the client
-  // renders) and (b) emit a transient `data-continuation` part after the model stream for
-  // any continuation-gated tool that just ran, while holding the terminal `finish` chunk
-  // so the ordering is `…tool-output-available, data-continuation, finish`. The transient
-  // part is delivered to the client but never merged into message history.
-  const streamResponse = createUIMessageStreamResponse({
-    stream: createUIMessageStream({
-      execute: async ({ writer }) => {
-        for (const { toolCallId, output } of newlyResolvedOutputs) {
+  const stream = createUIMessageStream({
+    execute: async ({ writer }) => {
+      // Stream results for tools the user approved this round so the client can
+      // move each approved card to its result state, before the model continues.
+      for (const o of executedOutputs) {
+        if (o.isError) {
+          writer.write({
+            type: 'tool-output-error',
+            toolCallId: o.toolCallId,
+            errorText: o.errorText ?? 'Tool error',
+          });
+        } else {
           writer.write({
             type: 'tool-output-available',
-            toolCallId,
-            output: unwrapToolOutput(output),
+            toolCallId: o.toolCallId,
+            output: o.output,
           });
         }
+      }
 
-        const reader = result.toUIMessageStream().getReader();
-        let finishChunk: Awaited<ReturnType<typeof reader.read>>['value'] | null = null;
-        for (;;) {
-          // eslint-disable-next-line no-await-in-loop -- sequential stream consumption
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value.type === 'finish') {
-            finishChunk = value;
-          } else {
-            writer.write(value);
+      const result = streamText({
+        model: bedrock('global.anthropic.claude-sonnet-4-6'),
+        onError: (error) => {
+          console.error('[da-agent] streamText error:', formatErrorForLog(error));
+
+          // Diagnostic: capture full payload when the Anthropic API rejects orphaned
+          // tool_use blocks. This should be rare (ensureOrphanedToolResults injects
+          // synthetic results) but if it fires we want the exact messages array.
+          const errMsg = error instanceof Error ? error.message : String(error);
+          if (errMsg.includes('tool_use') && errMsg.includes('tool_result')) {
+            console.error(
+              '[da-agent] orphaned tool_use slipped past pipeline — modelMessages:\n',
+              JSON.stringify(modelMessages, null, 2),
+            );
           }
+
+          ctx.collab?.disconnect();
+          cleanupMCP();
+        },
+        onFinish: async () => {
+          await flushTelemetry();
+          ctx.collab?.disconnect();
+          cleanupMCP();
+        },
+        system: systemPrompt,
+        messages: modelMessages as ModelMessage[],
+        tools: allTools,
+        // Halt after the normal step budget OR immediately after a step that ran a
+        // continuation-gated tool, so the user can review results before continuing.
+        stopWhen: [
+          stepCountIs(5),
+          ({ steps }) => {
+            const last = steps.at(-1);
+            return !!last?.toolCalls?.some((tc) => requiresContinuationApproval(tc.toolName));
+          },
+        ],
+        experimental_telemetry: {
+          isEnabled: true,
+          functionId: 'da-agent-chat',
+          metadata: {
+            userId: extractImsUserId(imsToken) ?? 'unknown',
+            org: ctx.pageContext?.org ?? 'unknown',
+            site: ctx.pageContext?.site ?? 'unknown',
+            path: ctx.pageContext?.path ?? 'unknown',
+            sessionId: sessionId ?? 'unknown',
+          },
+        },
+      });
+
+      // Merge the model stream manually so we can emit a transient `data-continuation`
+      // part after the model stream for any continuation-gated tool that just ran, while
+      // holding the terminal `finish` chunk so the ordering is
+      // `…tool-output-available, data-continuation, finish`. The transient part is
+      // delivered to the client but never merged into message history. (Outputs of tools
+      // approved this round were already streamed above from `executedOutputs`.)
+      const reader = result.toUIMessageStream().getReader();
+      let finishChunk: Awaited<ReturnType<typeof reader.read>>['value'] | null = null;
+      for (;;) {
+        // eslint-disable-next-line no-await-in-loop -- sequential stream consumption
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value.type === 'finish') {
+          finishChunk = value;
+        } else {
+          writer.write(value);
         }
+      }
 
-        const continuationParts = buildContinuationParts(
-          (await result.steps).at(-1),
-          requiresContinuationApproval,
-        );
-        for (const part of continuationParts) writer.write(part);
+      const continuationParts = buildContinuationParts(
+        (await result.steps).at(-1),
+        requiresContinuationApproval,
+      );
+      for (const part of continuationParts) writer.write(part);
 
-        if (finishChunk) writer.write(finishChunk);
-      },
-      onError: (error) => formatErrorForLog(error),
-    }),
+      if (finishChunk) writer.write(finishChunk);
+    },
+    onError: (error) => {
+      console.error('[da-agent] stream error:', formatErrorForLog(error));
+      return 'The agent encountered an error.';
+    },
   });
+
+  const streamResponse = createUIMessageStreamResponse({ stream });
 
   const headers = new Headers(streamResponse.headers);
   for (const [key, value] of Object.entries(CORS_HEADERS)) {
