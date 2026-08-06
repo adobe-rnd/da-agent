@@ -32,3 +32,35 @@ describe('getBuiltinSkill', () => {
     expect(getBuiltinSkill('  trim-me.md  ')?.body).toBe('x');
   });
 });
+
+describe('DA Structured Content built-in skills', () => {
+  const SC_SKILL_IDS = [
+    'compute-editor-urls',
+    'generate-schema',
+    'serialize-structured-content',
+    'import-structured-content',
+    'validate-structured-content',
+    'author-structured-content',
+  ];
+
+  it.each(SC_SKILL_IDS)('resolves "%s" with non-empty body', (id) => {
+    const skill = getBuiltinSkill(id);
+    expect(skill).not.toBeNull();
+    expect(skill!.body.trim().length).toBeGreaterThan(0);
+  });
+
+  it.each(SC_SKILL_IDS)(
+    '"%s" contains no Claude-Code Skill() delegation syntax (da-agent has no such tool)',
+    (id) => {
+      const skill = getBuiltinSkill(id);
+      expect(skill!.body).not.toContain('Skill(skill=');
+      expect(skill!.body).not.toContain('mode=delegated');
+    },
+  );
+
+  it.each(SC_SKILL_IDS)('"%s" references da-agent tool names, not da-sc-mcp doc names', (id) => {
+    const skill = getBuiltinSkill(id);
+    expect(skill!.body).not.toContain('da_get_source');
+    expect(skill!.body).not.toContain('da_create_source');
+  });
+});

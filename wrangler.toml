@@ -32,6 +32,7 @@ RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
 LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 GOVERNANCE_AGENT_URL = "https://enterprise-context.adobe.io/mcp/"
+DA_SC_MCP_URL = "https://da-sc-mcp-ci.adobeaem.workers.dev/mcp"
 TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev, mcp.adobeaemcloud.com, d31bkz463thsuv.cloudfront.net, mcp.aem.services, *.mcp.aem.services"
 
 # ----------------------------------------------------------------------
@@ -53,6 +54,7 @@ RETURN_STACK_TRACES = "false"
 DA_ORIGIN = "https://admin.da.live"
 LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 GOVERNANCE_AGENT_URL = "https://enterprise-context.adobe.io/mcp/"
+DA_SC_MCP_URL = "https://da-sc-mcp.adobeaem.workers.dev/mcp"
 TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev, mcp.adobeaemcloud.com, d31bkz463thsuv.cloudfront.net"
 
 # ----------------------------------------------------------------------
@@ -73,4 +75,5 @@ RETURN_STACK_TRACES = "true"
 DA_ORIGIN = "http://localhost:8787"
 LANGFUSE_BASEURL = "https://mystique-langfuse-prod.ethos117-prod-va6.ethos.adobe.net/"
 GOVERNANCE_AGENT_URL = "https://enterprise-context-stage.adobe.io/mcp/"
+DA_SC_MCP_URL = "https://da-sc-mcp-ci.adobeaem.workers.dev/mcp"
 TRUSTED_MCP_DOMAINS = "*.adobe.io,*.adobe.net,*.adobe.com, *.adobeaem.workers.dev, mcp.adobeaemcloud.com, d31bkz463thsuv.cloudfront.net"

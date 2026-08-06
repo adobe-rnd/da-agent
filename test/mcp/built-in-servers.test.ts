@@ -5,6 +5,14 @@ function envWith(overrides?: Record<string, unknown>): Env {
   return { GOVERNANCE_AGENT_URL: 'https://gov.example.com/mcp/', ...overrides } as unknown as Env;
 }
 
+function envWithDaSc(overrides?: Record<string, unknown>): Env {
+  return {
+    GOVERNANCE_AGENT_URL: undefined,
+    DA_SC_MCP_URL: 'https://da-sc-mcp.example.com/mcp',
+    ...overrides,
+  } as unknown as Env;
+}
+
 describe('getBuiltInMcpServers', () => {
   it('returns governance-agent when GOVERNANCE_AGENT_URL is set', () => {
     const servers = getBuiltInMcpServers(envWith());
@@ -32,5 +40,37 @@ describe('getBuiltInMcpServers', () => {
       envWith({ GOVERNANCE_AGENT_URL: 'http://localhost:8000/mcp/' }),
     );
     expect(servers['governance-agent'].url).toBe('http://localhost:8000/mcp/');
+  });
+
+  it('returns both servers when both env vars are set', () => {
+    const servers = getBuiltInMcpServers({
+      GOVERNANCE_AGENT_URL: 'https://gov.example.com/mcp/',
+      DA_SC_MCP_URL: 'https://da-sc-mcp.example.com/mcp',
+    } as unknown as Env);
+    expect(servers).toHaveProperty('governance-agent');
+    expect(servers).toHaveProperty('da-sc');
+  });
+
+  it('returns da-sc when DA_SC_MCP_URL is set', () => {
+    const servers = getBuiltInMcpServers(envWithDaSc());
+    expect(servers).toHaveProperty('da-sc');
+    expect(servers['da-sc'].url).toBe('https://da-sc-mcp.example.com/mcp');
+  });
+
+  it('omits da-sc when DA_SC_MCP_URL is unset', () => {
+    const servers = getBuiltInMcpServers(envWithDaSc({ DA_SC_MCP_URL: undefined }));
+    expect(servers).not.toHaveProperty('da-sc');
+  });
+
+  it('does not send the IMS token for da-sc (stateless, auth-free server)', () => {
+    const servers = getBuiltInMcpServers(envWithDaSc());
+    expect(servers['da-sc'].sendImsToken).toBeUndefined();
+  });
+
+  it('da-sc instructions reference the schema path and editor URL conventions', () => {
+    const servers = getBuiltInMcpServers(envWithDaSc());
+    expect(servers['da-sc'].instructions).toContain('/.da/forms/schemas/');
+    expect(servers['da-sc'].instructions).toContain('da.live/apps/schema');
+    expect(servers['da-sc'].instructions).toContain('da.live/form');
   });
 });
