@@ -6,6 +6,7 @@ import {
   _fallbackConfig,
 } from '../../src/skills/folder-loader.js';
 import type { DAAdminClient } from '../../src/da-admin/client.js';
+import { BUILTIN_SKILLS } from '../../src/skills/builtin-skills.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -373,5 +374,73 @@ describe('loadSkillBodyFromFolder', () => {
 
     const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'no-fm');
     expect(body).toContain('Body text for no-fm');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Built-in code skills (available to presets, hidden from the index/UI)
+// ---------------------------------------------------------------------------
+
+describe('loadSkillBodyFromFolder (built-in code skills)', () => {
+  afterEach(() => {
+    delete BUILTIN_SKILLS['builtin-only'];
+    delete BUILTIN_SKILLS['brand-voice'];
+    _fallbackConfig.enabled = true;
+  });
+
+  it('resolves a built-in skill when the folder has no skill.md', async () => {
+    BUILTIN_SKILLS['builtin-only'] = { body: 'Built-in instructions.' };
+    const client = mockClient({ configSkills: [] }); // folder 404, empty sheet
+
+    const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'builtin-only');
+    expect(body).toBe('Built-in instructions.');
+  });
+
+  it('lets folder-authored content override a built-in of the same id', async () => {
+    BUILTIN_SKILLS['brand-voice'] = { body: 'Built-in body (should be overridden).' };
+    const client = mockClient({
+      sourceByPath: {
+        '.da/skills/brand-voice/skill.md': SKILL_MD('brand-voice', 'Enforce tone', 1),
+      },
+    });
+
+    const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'brand-voice');
+    expect(body).toContain('Body text for brand-voice');
+    expect(body).not.toContain('should be overridden');
+  });
+
+  it('prefers a built-in over the legacy config sheet', async () => {
+    BUILTIN_SKILLS['builtin-only'] = { body: 'Built-in wins.' };
+    const client = mockClient({
+      // folder 404, but a sheet row with the same id also exists
+      configSkills: [{ key: 'builtin-only', content: '# Legacy\n\nLegacy body.' }],
+    });
+
+    const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'builtin-only');
+    expect(body).toBe('Built-in wins.');
+  });
+
+  it('resolves a built-in even when the legacy fallback is disabled', async () => {
+    _fallbackConfig.enabled = false;
+    BUILTIN_SKILLS['builtin-only'] = { body: 'Still available.' };
+    const client = mockClient(); // folder 404
+
+    const body = await loadSkillBodyFromFolder(client, 'org', 'mysite', 'builtin-only');
+    expect(body).toBe('Still available.');
+  });
+
+  it('never lists built-in skills in the folder index (kept out of the UI)', async () => {
+    BUILTIN_SKILLS['builtin-only'] = { title: 'Hidden', body: 'Hidden body.' };
+    const client = mockClient({
+      listResponse: [{ name: 'brand-voice', path: '/.da/skills/brand-voice' }],
+      sourceByPath: {
+        '.da/skills/brand-voice/skill.md': SKILL_MD('brand-voice', 'Enforce tone'),
+      },
+    });
+
+    const index = await loadSkillsIndexFromFolders(client, 'org', 'mysite');
+    const ids = index.skills.map((s) => s.id);
+    expect(ids).toContain('brand-voice');
+    expect(ids).not.toContain('builtin-only');
   });
 });

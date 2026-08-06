@@ -13,6 +13,7 @@ import type { DASource } from '../da-admin/types.js';
 import { parseSkillIndexEntry, stripFrontmatter } from './frontmatter.js';
 import { loadSkillsIndex, loadSkillContent } from './loader.js';
 import type { SkillsIndex, SkillSummary } from './loader.js';
+import { getBuiltinSkill } from './builtin-skills.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -177,10 +178,13 @@ export async function loadSkillsIndexFromFolders(
 /**
  * Read the full body of a skill with frontmatter stripped.
  *
- * Tries `.da/skills/<id>/skill.md` first.  Falls back to the legacy
- * config-sheet row when the file is not found and the fallback is enabled.
+ * Resolution order:
+ *   1. `.da/skills/<id>/skill.md` (folder-authored content wins).
+ *   2. Built-in code skill from `builtin-skills.ts` (available to presets,
+ *      hidden from the index/UI).
+ *   3. Legacy config-sheet row, when the fallback is enabled.
  *
- * Returns `null` when the skill is not found in either location.
+ * Returns `null` when the skill is not found in any location.
  */
 export async function loadSkillBodyFromFolder(
   client: DAAdminClient,
@@ -206,6 +210,13 @@ export async function loadSkillBodyFromFolder(
       warn('getSource failed for skill body', { id, path, err });
     }
   }
+
+  // Built-in code skills: available to presets (including custom presets that
+  // reference the id), never listed in the index/UI. Folder-authored content
+  // above wins, so a site can override a built-in by creating its skill.md.
+  // Checked before the legacy sheet so built-ins don't count as legacy hits.
+  const builtin = getBuiltinSkill(id);
+  if (builtin) return builtin.body.trim() || null;
 
   if (_fallbackConfig.enabled) {
     recordLegacyFallback(org, site, `loadSkillBody:${id}`);
