@@ -15,7 +15,7 @@ When necessary, ensure you have the full picture before drawing conclusions abou
 `;
 
 const DA_SC_INSTRUCTIONS = `\
-DA Structured Content (schema-driven forms) tools live on this server (\`sc_compile_schema\`, \`sc_validate_document\`, \`sc_serialize_schema\`, \`sc_serialize_document\`). \
+Structured Content (schema-driven forms) tools live on this server (\`sc_compile_schema\`, \`sc_validate_document\`, \`sc_serialize_schema\`, \`sc_serialize_document\`). \
 Schemas are stored at \`/.da/forms/schemas/{schemaName}.html\` via the regular content tools (content_create/content_read).
 Editor URLs: schema editor is \`https://da.live/apps/schema#/<org>/<site>\` (lists all schemas — mention the schema name in prose, it is not part of the URL); \
 document editor for a structured content document is \`https://da.live/form#/<org>/<site>/<path-without-.html>\` (note the \`/form\` route, not \`/edit\`).

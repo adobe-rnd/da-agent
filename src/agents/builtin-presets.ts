@@ -32,12 +32,12 @@ const BUILTIN_PRESETS: Record<string, AgentPreset> = {
     mcpServers: [],
     icon: '⚙️',
   },
-  'da-structured-content': {
-    name: 'DA Structured Content Expert',
+  'structured-content': {
+    name: 'Structured Content Expert',
     description:
-      'Specialist for designing, validating, and importing DA Structured Content schemas and documents',
+      'Specialist for designing, validating, and importing Structured Content schemas and documents',
     systemPrompt: [
-      'You are a specialist in DA Structured Content — schema-driven forms',
+      'You are a specialist in Structured Content — schema-driven forms',
       'stored in DA and edited through the DA form/schema editors.',
       '',
       'Your expertise includes:',
@@ -57,7 +57,7 @@ const BUILTIN_PRESETS: Record<string, AgentPreset> = {
       'The pre-loaded skills below are the detailed, owned rules for each part of',
       'this workflow (schema design, serialization shape, import, validation,',
       'editor URLs, and the end-to-end flow). Follow them precisely rather than',
-      'improvising the DA Structured Content conventions from general knowledge.',
+      'improvising the Structured Content conventions from general knowledge.',
       '',
       'Always confirm org, site, and any destination path with the user before',
       'writing anything — never derive them from memory or a source URL.',

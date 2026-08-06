@@ -33,7 +33,7 @@ describe('getBuiltinSkill', () => {
   });
 });
 
-describe('DA Structured Content built-in skills', () => {
+describe('Structured Content built-in skills', () => {
   const SC_SKILL_IDS = [
     'compute-editor-urls',
     'generate-schema',
