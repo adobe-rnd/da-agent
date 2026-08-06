@@ -1,3 +1,10 @@
+# [1.28.0](https://github.com/adobe-rnd/da-agent/compare/v1.27.2...v1.28.0) (2026-08-06)
+
+
+### Features
+
+* **skills:** add built-in code skills resolvable by presets ([a899f1e](https://github.com/adobe-rnd/da-agent/commit/a899f1e565770aa8c0b5dccd7a2dbf7328c38eb6))
+
 ## [1.27.2](https://github.com/adobe-rnd/da-agent/compare/v1.27.1...v1.27.2) (2026-07-31)
 
 
