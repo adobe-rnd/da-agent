@@ -70,7 +70,10 @@ const BUILTIN_PRESETS: Record<string, AgentPreset> = {
       'compute-editor-urls',
       'author-structured-content',
     ],
-    mcpServers: ['da-sc'],
+    // da-sc tools are available because the server is registered always-on
+    // in getBuiltInMcpServers (gated on DA_SC_MCP_URL), not via this field —
+    // preset.mcpServers is never read by tool-assembly/prompt-builder.
+    mcpServers: [],
     icon: '🧱',
   },
 };

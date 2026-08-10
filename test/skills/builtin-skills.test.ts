@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { BUILTIN_SKILLS, getBuiltinSkill } from '../../src/skills/builtin-skills.js';
+import { getBuiltinPreset } from '../../src/agents/builtin-presets.js';
 
 // Register temporary built-ins for the test, mirroring the `_fallbackConfig`
 // mutable-seam pattern used elsewhere in the skills tests.
@@ -62,5 +63,14 @@ describe('Structured Content built-in skills', () => {
     const skill = getBuiltinSkill(id);
     expect(skill!.body).not.toContain('da_get_source');
     expect(skill!.body).not.toContain('da_create_source');
+  });
+
+  it('"structured-content" preset exists and every referenced skill id resolves', () => {
+    const preset = getBuiltinPreset('structured-content');
+    expect(preset).not.toBeNull();
+    for (const id of preset!.skills) {
+      expect(getBuiltinSkill(id), `preset skill id "${id}" should resolve`).not.toBeNull();
+    }
+    expect(preset!.skills.sort()).toEqual([...SC_SKILL_IDS].sort());
   });
 });

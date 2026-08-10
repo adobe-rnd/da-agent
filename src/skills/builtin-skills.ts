@@ -101,7 +101,7 @@ The same policy applies if \`mcp__da-sc__sc_compile_schema\` reports shape/key i
 
 ## Workflow
 1. **Parse source shape.** Description → derive a candidate field model. Structured file/payload → parse directly. Apply the source-shape policy above before drafting; if reserved keys appear, resolve them with the user first.
-2. **Draft schema JSON** using the official spec only: https://raw.githubusercontent.com/adobe/da-sc-sdk/refs/heads/main/docs/schema-spec.md — it is the single source of truth; don't invent local rules here, they drift from the spec over time.
+2. **Draft schema JSON** following the schema spec conventions (canonical reference: https://raw.githubusercontent.com/adobe/da-sc-sdk/refs/heads/main/docs/schema-spec.md). No fetch tool is available in this agent, so this URL cannot be retrieved live — treat it as a citation, not a step to execute. If you're unsure whether a rule you're applying still matches the spec, say so and ask the user to confirm rather than inventing local rules that may have drifted.
 3. **Validate**: call \`mcp__da-sc__sc_compile_schema\`. If \`valid: true\` and \`schemaIssues\` is empty, continue. Otherwise fix each issue using its \`reason\`, \`message\`, and \`schemaPath\` (where in the schema to fix it), then re-run until clean.
 4. **Serialize**: call \`mcp__da-sc__sc_serialize_schema\` with the validated schema JSON.
 5. **Save**: call \`content_create\` with \`path: "/.da/forms/schemas/{schemaName}.html"\`, the serialized HTML as \`content\`, \`contentType: "text/html"\`.
@@ -267,7 +267,7 @@ Take source material of any kind — URL, JSON, file, image/PDF, topic, or plain
 Get explicit confirmation of \`org\`, \`site\`, and a proposed \`docPath\` before doing anything else, in the current conversation (not from memory).
 
 ### Step 2 — Build a structured payload from the source
-- **URL** — fetch it and identify candidate structures (lists, cards, repeating sections); build a structured representation.
+- **URL** — this agent has no fetch/web-retrieval tool, so the URL cannot be retrieved automatically. Ask the user to paste the page's text/HTML content (or attach it) instead; then identify candidate structures (lists, cards, repeating sections) from that content and build a structured representation.
 - **Image/PDF** — extract structured content directly.
 - **Raw payload (JSON, etc.)** — parse as-is, don't reshape.
 - **Plain-language brief/topic** — synthesize a small, plausible sample (typically 3–6 fields, at least one nested structure if natural); keep names simple, this schema will be the user's first impression of structured content.
@@ -280,7 +280,7 @@ Apply any key mappings from Step 3 to the source payload, validate it against th
 
 ### Step 5 — Report
 Compose the single user-facing response (nothing before this point should be user-visible except the Step 1 confirmation):
-- Source type summary (e.g. "URL → 3 structures detected", "Demo for topic: blog posts")
+- Source type summary (e.g. "Pasted page content → 3 structures detected", "Demo for topic: blog posts")
 - \`schemaName\` and its saved path, plus the schema editor URL (\`https://da.live/apps/schema#/<org>/<site>\` — mention \`schemaName\` in prose, it's not in the URL)
 - Saved document path, plus the document editor URL (\`https://da.live/form#/<org>/<site>/<path-without-.html>\`)
 - Any notable decisions: key mappings, validation issues resolved, derived titles
