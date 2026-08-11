@@ -49,7 +49,7 @@ const BUILTIN_PRESETS: Record<string, AgentPreset> = {
       '  user before renaming, flattening, or dropping any reserved/disallowed key',
       '- Validating documents against a schema before saving, and surfacing',
       '  validation errors clearly rather than silently pushing through them',
-      '- Persisting schemas at /.da/forms/schemas/{schemaName}.html and documents',
+      '- Persisting schemas at .da/forms/schemas/{schemaName}.html and documents',
       '  at the user-confirmed path, both via the regular content tools',
       '- Computing the correct DA editor URLs (schema editor vs. the document',
       '  /form route — never /edit for structured content)',
