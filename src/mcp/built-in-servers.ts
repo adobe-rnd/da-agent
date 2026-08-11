@@ -33,6 +33,16 @@ export function getBuiltInMcpServers(env: Env): Record<string, BuiltInMCPServerC
       url: governanceUrl,
       sendImsToken: true,
       instructions: GOVERNANCE_AGENT_INSTRUCTIONS,
+      // evaluate_* tools produce reports the user should review before the agent
+      // continues (e.g. mid-skill, before preview/publish). This SHOULD gate them
+      // with a post-execution continuation prompt (data-continuation) instead of a
+      // pre-execution approval.
+      //
+      // TEMPORARILY DISABLED: the da-nx client on main (#648 AO refactor) has no UI
+      // to service the data-continuation prompt, so emitting it hangs the turn with
+      // no way to Continue/Stop. Re-enable once the client renders the continuation
+      // interaction. Until then evaluate_* returns its report as a normal tool result.
+      // continuationApprovalPatterns: ['evaluate_*'],
     };
   }
 

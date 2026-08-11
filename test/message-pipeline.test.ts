@@ -7,6 +7,7 @@ import {
   ensureOrphanedToolResults,
   expandUserSelectionContextForModel,
   expandLatestUserAttachmentsForModel,
+  buildContinuationParts,
   TOOL_STATE,
 } from '../src/message-pipeline.js';
 
@@ -541,5 +542,67 @@ describe('toModelMessages', () => {
     // the orphan net then injects a synthetic result
     const withOrphans = ensureOrphanedToolResults(out);
     expect(withOrphans[1].content[0].type).toBe('tool-result');
+  });
+});
+
+describe('buildContinuationParts', () => {
+  const gates = (name: string) => name === 'mcp__governance-agent__evaluate_page';
+
+  it('emits one transient part for a gated tool that produced a result', () => {
+    const parts = buildContinuationParts(
+      {
+        toolCalls: [{ toolCallId: 'call-a', toolName: 'mcp__governance-agent__evaluate_page' }],
+        toolResults: [{ toolCallId: 'call-a' }],
+      },
+      gates,
+    );
+    expect(parts).toEqual([
+      {
+        type: 'data-continuation',
+        transient: true,
+        data: { toolCallId: 'call-a', toolName: 'mcp__governance-agent__evaluate_page' },
+      },
+    ]);
+  });
+
+  it('does not emit for a non-gated tool', () => {
+    const parts = buildContinuationParts(
+      {
+        toolCalls: [{ toolCallId: 'call-a', toolName: 'content_read' }],
+        toolResults: [{ toolCallId: 'call-a' }],
+      },
+      gates,
+    );
+    expect(parts).toEqual([]);
+  });
+
+  it('does not emit for a gated tool that produced no result', () => {
+    const parts = buildContinuationParts(
+      {
+        toolCalls: [{ toolCallId: 'call-a', toolName: 'mcp__governance-agent__evaluate_page' }],
+        toolResults: [],
+      },
+      gates,
+    );
+    expect(parts).toEqual([]);
+  });
+
+  it('emits one part per gated tool in a multi-tool step', () => {
+    const parts = buildContinuationParts(
+      {
+        toolCalls: [
+          { toolCallId: 'call-a', toolName: 'mcp__governance-agent__evaluate_page' },
+          { toolCallId: 'call-b', toolName: 'content_read' },
+          { toolCallId: 'call-c', toolName: 'mcp__governance-agent__evaluate_page' },
+        ],
+        toolResults: [{ toolCallId: 'call-a' }, { toolCallId: 'call-c' }],
+      },
+      gates,
+    );
+    expect(parts.map((p) => p.data.toolCallId)).toEqual(['call-a', 'call-c']);
+  });
+
+  it('returns nothing when there is no final step', () => {
+    expect(buildContinuationParts(undefined, gates)).toEqual([]);
   });
 });

@@ -16,6 +16,20 @@ function getServerUrl(cfg: MCPServerConfig): string | null {
 }
 
 /**
+ * Match a name against a glob pattern where `*` means "any run of characters".
+ * All other regex metacharacters are escaped. Used for continuation-approval
+ * patterns (e.g. `evaluate_*` → matches `evaluate_page`).
+ */
+export function matchesGlob(name: string, pattern: string): boolean {
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, (ch) => (ch === '*' ? '.*' : `\\${ch}`));
+  return new RegExp(`^${escaped}$`).test(name);
+}
+
+function matchesAnyGlob(name: string, patterns: string[] | undefined): boolean {
+  return !!patterns && patterns.some((p) => matchesGlob(name, p));
+}
+
+/**
  * Convert a single JSON Schema property definition to a Zod type.
  * Handles the common scalar types returned by MCP servers.
  */
@@ -89,6 +103,7 @@ export function mcpToolToAITool(
   serverId: string,
   mcpTool: MCPToolDefinition,
   mcpClient: MCPClient,
+  continuationApprovalPatterns?: string[],
 ) {
   const toolName = `mcp__${serverId}__${mcpTool.name}`;
   const description = mcpTool.description ?? `MCP tool ${mcpTool.name} from server ${serverId}`;
@@ -98,17 +113,27 @@ export function mcpToolToAITool(
     mcpTool.inputSchema as Record<string, unknown> | undefined,
   );
 
+  // Continuation-gated tools pause the agentic loop after they finish (see server.ts),
+  const isContinuationGated = matchesAnyGlob(mcpTool.name, continuationApprovalPatterns);
+
   return {
     name: toolName,
     tool: tool({
       description,
       inputSchema,
+      // Flag read by the stopWhen predicate in server.ts. `daAgent` is our own
+      // provider namespace and is ignored by the Bedrock provider.
+      ...(isContinuationGated
+        ? { providerOptions: { daAgent: { continuationApproval: true } } }
+        : {}),
       // Fail-closed gating for untrusted external MCP servers. Per the MCP spec
       // annotation defaults (readOnlyHint=false, destructiveHint=true) and the
       // fact that annotations are optional, we gate unless the tool tells us it
       // is safe: skip approval only when it is read-only OR explicitly
       // non-destructive. Everything else — including unannotated tools —
-      // requires approval.
+      // requires approval. This is independent of continuation gating: a tool
+      // can require both pre-execution approval and post-execution continuation
+      // approval.
       needsApproval: async () => {
         const { readOnlyHint, destructiveHint } = mcpTool.annotations ?? {};
         return readOnlyHint !== true && destructiveHint !== false;
@@ -146,6 +171,8 @@ export async function connectAndRegisterMCPTools(
   mcpConfig: {
     mcpServers: Record<string, MCPServerConfig>;
     toolAllowPatterns: string[];
+    /** Per-server glob patterns for post-execution continuation approval. */
+    continuationApprovalPatterns?: Record<string, string[]>;
   },
   options?: {
     headers?: Record<string, string>;
@@ -194,6 +221,7 @@ export async function connectAndRegisterMCPTools(
         const discoveredTools = await client.listTools();
         clients.push(client);
 
+        const serverContinuationPatterns = mcpConfig.continuationApprovalPatterns?.[serverId];
         let registeredCount = 0;
         for (const toolDef of discoveredTools) {
           try {
@@ -201,6 +229,7 @@ export async function connectAndRegisterMCPTools(
               serverId,
               toolDef,
               client,
+              serverContinuationPatterns,
             );
             tools[qualifiedName] = aiTool;
             registeredCount += 1;
