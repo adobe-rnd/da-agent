@@ -1,3 +1,11 @@
+## [1.29.1](https://github.com/adobe-rnd/da-agent/compare/v1.29.0...v1.29.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* **mcp:** disable evaluate_* continuation gate until client supports it ([d6660ba](https://github.com/adobe-rnd/da-agent/commit/d6660ba39bcd9dd82b0d1e6ecbff4728ab65b2d4)), closes [#648](https://github.com/adobe-rnd/da-agent/issues/648) [#522](https://github.com/adobe-rnd/da-agent/issues/522) [#648](https://github.com/adobe-rnd/da-agent/issues/648)
+* **mcp:** disable evaluate_* continuation gate until client supports it ([c6f752c](https://github.com/adobe-rnd/da-agent/commit/c6f752c759ec64711a3f97185cc8b4b45b0c8d1f)), closes [#648](https://github.com/adobe-rnd/da-agent/issues/648) [#522](https://github.com/adobe-rnd/da-agent/issues/522) [#648](https://github.com/adobe-rnd/da-agent/issues/648)
+
 # [1.29.0](https://github.com/adobe-rnd/da-agent/compare/v1.28.0...v1.29.0) (2026-08-11)
 
 
