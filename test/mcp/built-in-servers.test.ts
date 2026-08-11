@@ -34,8 +34,12 @@ describe('getBuiltInMcpServers', () => {
     expect(servers['governance-agent'].url).toBe('http://localhost:8000/mcp/');
   });
 
-  it('gates evaluate_* tools behind a post-execution continuation approval', () => {
+  // Continuation gating for evaluate_* is TEMPORARILY DISABLED: the da-nx client on
+  // main (#648) has no UI to service the data-continuation prompt, so emitting it
+  // hangs the turn. Re-enable (and restore this assertion to ['evaluate_*']) once the
+  // client renders the continuation interaction. See built-in-servers.ts.
+  it('does not gate evaluate_* behind a continuation approval (client cannot service it yet)', () => {
     const servers = getBuiltInMcpServers(envWith());
-    expect(servers['governance-agent'].continuationApprovalPatterns).toEqual(['evaluate_*']);
+    expect(servers['governance-agent'].continuationApprovalPatterns).toBeUndefined();
   });
 });
