@@ -1,3 +1,16 @@
+# [1.30.0](https://github.com/adobe-rnd/da-agent/compare/v1.29.1...v1.30.0) (2026-08-11)
+
+
+### Bug Fixes
+
+* **agents:** address review feedback on da-sc integration ([7055ce3](https://github.com/adobe-rnd/da-agent/commit/7055ce3ca5a2e38eff0dca2774308501cd975ca5))
+* **config:** align DA_SC_MCP_URL trailing slash with GOVERNANCE_AGENT_URL ([228cb33](https://github.com/adobe-rnd/da-agent/commit/228cb3372adf22182490e2d0fbe876a44c3d9260))
+
+
+### Features
+
+* **mcp:** integrate da-sc-mcp as built-in server with adapted skills and expert preset ([9ad5cbf](https://github.com/adobe-rnd/da-agent/commit/9ad5cbf84aa7d444bc10d236895096a026dd4487))
+
 ## [1.29.1](https://github.com/adobe-rnd/da-agent/compare/v1.29.0...v1.29.1) (2026-08-11)
 
 
