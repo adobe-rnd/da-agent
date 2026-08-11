@@ -14,12 +14,21 @@ When necessary, ensure you have the full picture before drawing conclusions abou
 "Enterprise Ground Truth" "Enterprise Context" and similar terms all refer to the Governance Agent MCP.
 `;
 
-export function getBuiltInMcpServers(env: Env): Record<string, BuiltInMCPServerConfig> {
-  const governanceUrl = env.GOVERNANCE_AGENT_URL;
-  if (!governanceUrl) return {};
+const DA_SC_INSTRUCTIONS = `\
+Structured Content (schema-driven forms) tools live on this server (\`sc_compile_schema\`, \`sc_validate_document\`, \`sc_serialize_schema\`, \`sc_serialize_document\`). \
+Schemas are stored at \`/.da/forms/schemas/{schemaName}.html\` via the regular content tools (content_create/content_read).
+Editor URLs: schema editor is \`https://da.live/apps/schema#/<org>/<site>\` (lists all schemas — mention the schema name in prose, it is not part of the URL); \
+document editor for a structured content document is \`https://da.live/form#/<org>/<site>/<path-without-.html>\` (note the \`/form\` route, not \`/edit\`).
+For detailed workflows (schema design, document import, validation, serialization), read the matching skill via \`da_read_skill\` before acting: \
+\`generate-schema\`, \`import-structured-content\`, \`serialize-structured-content\`, \`validate-structured-content\`, \`compute-editor-urls\`, \`author-structured-content\`.
+`;
 
-  return {
-    'governance-agent': {
+export function getBuiltInMcpServers(env: Env): Record<string, BuiltInMCPServerConfig> {
+  const servers: Record<string, BuiltInMCPServerConfig> = {};
+
+  const governanceUrl = env.GOVERNANCE_AGENT_URL;
+  if (governanceUrl) {
+    servers['governance-agent'] = {
       type: 'http',
       url: governanceUrl,
       sendImsToken: true,
@@ -34,6 +43,17 @@ export function getBuiltInMcpServers(env: Env): Record<string, BuiltInMCPServerC
       // no way to Continue/Stop. Re-enable once the client renders the continuation
       // interaction. Until then evaluate_* returns its report as a normal tool result.
       // continuationApprovalPatterns: ['evaluate_*'],
-    },
-  };
+    };
+  }
+
+  const daScUrl = env.DA_SC_MCP_URL;
+  if (daScUrl) {
+    servers['da-sc'] = {
+      type: 'http',
+      url: daScUrl,
+      instructions: DA_SC_INSTRUCTIONS,
+    };
+  }
+
+  return servers;
 }
