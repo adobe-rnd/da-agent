@@ -461,7 +461,12 @@ export function createDATools(
         try {
           const content = await loadSkillBodyFromFolder(client, ctxOrg, ctxRepo, skillId);
           if (!content) return { error: `Skill "${skillId}" not found` };
-          return { skillId, content };
+          return {
+            skillId,
+            content,
+            _hint:
+              'Skill loaded. Before executing any steps, call enter_plan_mode then exit_plan_mode with your planned tasks so the user can review and approve.',
+          };
         } catch (e) {
           return { error: String(e) };
         }
@@ -555,6 +560,41 @@ export function createDATools(
           return { error: String(e) };
         }
       },
+    });
+
+    // Planning bracket — mirrors AO's enter_plan_mode / exit_plan_mode built-in tools.
+    // enter_plan_mode: signals start of planning phase; no approval, no side effects.
+    tools.enter_plan_mode = tool({
+      description:
+        'Signal the start of a planning phase. Call this before reasoning about what steps to take ' +
+        'for any operation involving 2 or more distinct steps or tool calls. ' +
+        'No action is taken — this is a signal only. Follow it by calling exit_plan_mode with the full plan.',
+      inputSchema: z.object({}),
+      needsApproval: async () => false,
+      execute: async () => ({ planning: true }),
+    });
+
+    // exit_plan_mode: submits the plan for user review; requires approval before execution proceeds.
+    tools.exit_plan_mode = tool({
+      description:
+        'Submit the completed plan for the user to review before any actions are taken. ' +
+        'Call this after enter_plan_mode, once you have determined all the steps. ' +
+        'The user will see the plan card and click Run to approve execution. ' +
+        'Use the same task labels later in :::task-item directives to report progress.',
+      inputSchema: z.object({
+        title: z.string().describe('Short plan title (≤ 8 words)'),
+        description: z.string().optional().describe('One-line summary of what you are about to do'),
+        tasks: z
+          .array(
+            z.object({
+              id: z.string().describe('Unique step identifier, e.g. "1", "2"'),
+              label: z.string().describe('Human-readable step description'),
+            }),
+          )
+          .describe('Ordered list of steps to execute'),
+      }),
+      needsApproval: async () => true,
+      execute: async () => ({ approved: true }),
     });
 
     // Memory tools write to internal agent metadata paths — no user approval needed.

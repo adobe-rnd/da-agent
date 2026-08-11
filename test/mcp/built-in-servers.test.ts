@@ -73,4 +73,9 @@ describe('getBuiltInMcpServers', () => {
     expect(servers['da-sc'].instructions).toContain('da.live/apps/schema');
     expect(servers['da-sc'].instructions).toContain('da.live/form');
   });
+
+  it('gates evaluate_* tools behind a post-execution continuation approval', () => {
+    const servers = getBuiltInMcpServers(envWith());
+    expect(servers['governance-agent'].continuationApprovalPatterns).toEqual(['evaluate_*']);
+  });
 });
