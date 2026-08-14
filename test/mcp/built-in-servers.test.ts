@@ -78,7 +78,7 @@ describe('getBuiltInMcpServers', () => {
 
   it('da-sc instructions reference the schema path and editor URL conventions', () => {
     const servers = getBuiltInMcpServers(envWithDaSc());
-    expect(servers['da-sc'].instructions).toContain('/.da/forms/schemas/');
+    expect(servers['da-sc'].instructions).toContain('.da/forms/schemas/');
     expect(servers['da-sc'].instructions).toContain('da.live/apps/schema');
     expect(servers['da-sc'].instructions).toContain('da.live/form');
   });
