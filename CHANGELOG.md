@@ -1,3 +1,11 @@
+## [1.30.1](https://github.com/adobe-rnd/da-agent/compare/v1.30.0...v1.30.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* remove leading slash from schema save path in structured-content skills ([120a5b7](https://github.com/adobe-rnd/da-agent/commit/120a5b7f35b6ac1743ee7af5e3ac49ff151ec20c))
+* remove leading slash from schema save path in structured-content skills [#72](https://github.com/adobe-rnd/da-agent/issues/72) ([464f9e2](https://github.com/adobe-rnd/da-agent/commit/464f9e23e6945b909ffcb4ebf27919569212768d))
+
 # [1.30.0](https://github.com/adobe-rnd/da-agent/compare/v1.29.1...v1.30.0) (2026-08-11)
 
 
