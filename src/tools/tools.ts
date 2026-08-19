@@ -128,6 +128,14 @@ export function createDATools(
           }
           return await client.getSource(org, repo, ensureHtmlExtension(path));
         } catch (e) {
+          // A missing file is not a failure for the agent — it may be probing an
+          // optional file that doesn't exist yet (e.g. a workflow/approvals JSON
+          // when the backing MCP server isn't wired). Return a graceful not-found
+          // result (no `error` field) so the client doesn't render a red
+          // OUTPUT-ERROR badge and the model can reason about the absence directly.
+          if (isAPIError(e) && e.status === 404) {
+            return { path: ensureHtmlExtension(path), content: null, found: false, status: 404 };
+          }
           if (isAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };
         }
