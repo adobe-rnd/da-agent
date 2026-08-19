@@ -464,8 +464,11 @@ export function createDATools(
           return {
             skillId,
             content,
-            _hint:
-              'Skill loaded. Before executing any steps, call enter_plan_mode then exit_plan_mode with your planned tasks so the user can review and approve.',
+            // HOTFIX(da-nx#658): plan mode temporarily disabled — the da-nx client
+            // on main can't render plan/tasks yet, so don't tell the model to call
+            // enter_plan_mode/exit_plan_mode here. Restore the planning hint once
+            // #658 lands. Matches the gate in src/prompt-builder.ts.
+            _hint: 'Skill loaded. Execute the steps directly.',
           };
         } catch (e) {
           return { error: String(e) };

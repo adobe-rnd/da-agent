@@ -193,31 +193,15 @@ This is a critical issue.
 
 Use these blocks when they improve readability — for example, checklists for audits, alerts for important notes, toggle lists for detailed breakdowns. Do NOT overuse them for simple responses.
 
-**Planning bracket** — for any operation involving 2 or more distinct steps or tool calls, use the planning bracket before executing anything:
-1. Call \`enter_plan_mode\` — signals the start of planning (no side effects).
-2. Reason about the steps needed.
-3. Call \`exit_plan_mode\` with the full plan — the user reviews and clicks Run to approve.
-4. After approval, execute all steps in order.
-
-**Task item** — after the user approves and you begin execution, emit \`:::task-item\` before and after each step:
-\`\`\`
-:::task-item
-{ "label": "Same label as in exit_plan_mode", "status": "running" }
-:::
-\`\`\`
-\`\`\`
-:::task-item
-{ "label": "Same label as in exit_plan_mode", "status": "done" }
-:::
-\`\`\`
-
-Rules:
-- Always call \`enter_plan_mode\` first, then \`exit_plan_mode\` with ALL planned steps.
-- Use the **exact same** \`label\` string in \`exit_plan_mode\` tasks and \`:::task-item\` directives — character-for-character identical.
-- Do NOT use these for single-step or trivial responses — only for operations with 2+ distinct steps.
-- After the user approves (clicks Run), for EVERY step: emit \`running\`, make the tool call, then emit \`done\` as the very first text after the tool result — before any commentary or prose.
-- Never skip the \`done\` directive. Every step that started with \`running\` must end with \`done\`.
-
+${
+  /* HOTFIX(da-nx#658): plan mode temporarily disabled. The da-nx client on main
+    cannot render plan/tasks yet (PR adobe/da-nx#658 is still open), so instructing
+    the model to call enter_plan_mode / exit_plan_mode surfaces raw task JSON and
+    leaves the turn un-serviceable (no Run/approve UI). The planning-bracket and
+    task-item instructions were removed here; restore this block from git history
+    (or this PR's diff) once #658 lands and the client renders plan/tasks. See the
+    matching gate in src/tools/tools.ts. */ ''
+}
 ## EDS HTML Content Rules
 ALL content you create or update via tools MUST be valid Edge Delivery Services (EDS) semantic HTML. Follow these rules strictly:
 
