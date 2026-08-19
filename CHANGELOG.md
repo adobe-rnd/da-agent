@@ -1,3 +1,10 @@
+## [1.30.2](https://github.com/adobe-rnd/da-agent/compare/v1.30.1...v1.30.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* **prompt:** disable plan mode until da-nx client renders it (da-nx[#658](https://github.com/adobe-rnd/da-agent/issues/658)) ([02e2d05](https://github.com/adobe-rnd/da-agent/commit/02e2d05e8a8a412fe9da89330aff22342453088b))
+
 ## [1.30.1](https://github.com/adobe-rnd/da-agent/compare/v1.30.0...v1.30.1) (2026-08-14)
 
 
