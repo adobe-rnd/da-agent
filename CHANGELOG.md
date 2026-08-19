@@ -1,3 +1,10 @@
+## [1.30.3](https://github.com/adobe-rnd/da-agent/compare/v1.30.2...v1.30.3) (2026-08-19)
+
+
+### Bug Fixes
+
+* **tools:** content_read returns graceful not-found on 404 instead of error ([cab0e06](https://github.com/adobe-rnd/da-agent/commit/cab0e06e39fa1ce0545d75f9c524a51678296f9a))
+
 ## [1.30.2](https://github.com/adobe-rnd/da-agent/compare/v1.30.1...v1.30.2) (2026-08-19)
 
 
