@@ -574,39 +574,14 @@ export function createDATools(
     });
 
     // Planning bracket — mirrors AO's enter_plan_mode / exit_plan_mode built-in tools.
-    // enter_plan_mode: signals start of planning phase; no approval, no side effects.
-    tools.enter_plan_mode = tool({
-      description:
-        'Signal the start of a planning phase. Call this before reasoning about what steps to take ' +
-        'for any operation involving 2 or more distinct steps or tool calls. ' +
-        'No action is taken — this is a signal only. Follow it by calling exit_plan_mode with the full plan.',
-      inputSchema: z.object({}),
-      needsApproval: async () => false,
-      execute: async () => ({ planning: true }),
-    });
-
-    // exit_plan_mode: submits the plan for user review; requires approval before execution proceeds.
-    tools.exit_plan_mode = tool({
-      description:
-        'Submit the completed plan for the user to review before any actions are taken. ' +
-        'Call this after enter_plan_mode, once you have determined all the steps. ' +
-        'The user will see the plan card and click Run to approve execution. ' +
-        'Use the same task labels later in :::task-item directives to report progress.',
-      inputSchema: z.object({
-        title: z.string().describe('Short plan title (≤ 8 words)'),
-        description: z.string().optional().describe('One-line summary of what you are about to do'),
-        tasks: z
-          .array(
-            z.object({
-              id: z.string().describe('Unique step identifier, e.g. "1", "2"'),
-              label: z.string().describe('Human-readable step description'),
-            }),
-          )
-          .describe('Ordered list of steps to execute'),
-      }),
-      needsApproval: async () => true,
-      execute: async () => ({ approved: true }),
-    });
+    //
+    // HOTFIX(da-nx#658): plan mode is disabled until the da-nx client can render
+    // plan/tasks. PR #73 removed the prompt guidance, but the model still called
+    // these tools from their schema descriptions alone — entering plan mode and then
+    // showing a generic approval card for exit_plan_mode (which the client can't render
+    // as a plan). So do NOT register enter_plan_mode / exit_plan_mode at all while
+    // disabled. Both execute() were no-ops and nothing else references them, so this is
+    // self-contained. Restore this block (see git history / PR #73) once #658 lands.
 
     // Memory tools write to internal agent metadata paths — no user approval needed.
     tools.write_project_memory = tool({
