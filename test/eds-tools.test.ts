@@ -5,21 +5,17 @@ import { createDATools, createEDSTools } from '../src/tools/tools';
 // Minimal mock for EDSAdminClient
 function makeEdsClient(overrides: Partial<EDSAdminClient> = {}): EDSAdminClient {
   return {
-    preview: vi
-      .fn()
-      .mockResolvedValue({
-        status: 200,
-        path: '/docs/index',
-        url: 'https://main--repo--org.hlx.page/docs/index',
-      }),
+    preview: vi.fn().mockResolvedValue({
+      status: 200,
+      path: '/docs/index',
+      url: 'https://main--repo--org.hlx.page/docs/index',
+    }),
     unpreview: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index' }),
-    publishLive: vi
-      .fn()
-      .mockResolvedValue({
-        status: 200,
-        path: '/docs/index',
-        url: 'https://main--repo--org.hlx.live/docs/index',
-      }),
+    publishLive: vi.fn().mockResolvedValue({
+      status: 200,
+      path: '/docs/index',
+      url: 'https://main--repo--org.hlx.live/docs/index',
+    }),
     unpublishLive: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index' }),
     ...overrides,
   } as unknown as EDSAdminClient;
@@ -203,6 +199,30 @@ describe('DA tools still registered when client provided', () => {
   it('da_list_sources absent when daClient is null', () => {
     const tools = createDATools(null, {});
     expect(tools).not.toHaveProperty('content_list');
+  });
+
+  // HOTFIX(da-nx#658): plan mode is disabled until the client renders plan/tasks.
+  // PR #73 removed the prompt guidance; this ensures the tools themselves are not
+  // registered, so the model can't enter plan mode from the schema alone. Restore
+  // both assertions to toHaveProperty once #658 lands.
+  it('does not register enter_plan_mode / exit_plan_mode while plan mode is disabled', () => {
+    const daClient = {
+      listSources: vi.fn(),
+      getSource: vi.fn(),
+      createSource: vi.fn(),
+      updateSource: vi.fn(),
+      deleteSource: vi.fn(),
+      copyContent: vi.fn(),
+      moveContent: vi.fn(),
+      createVersion: vi.fn(),
+      getVersions: vi.fn(),
+      lookupMedia: vi.fn(),
+      lookupFragment: vi.fn(),
+      uploadMedia: vi.fn(),
+    } as any;
+    const tools = createDATools(daClient, {});
+    expect(tools).not.toHaveProperty('enter_plan_mode');
+    expect(tools).not.toHaveProperty('exit_plan_mode');
   });
 });
 
