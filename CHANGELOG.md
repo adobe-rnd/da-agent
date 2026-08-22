@@ -1,3 +1,10 @@
+## [1.30.4](https://github.com/adobe-rnd/da-agent/compare/v1.30.3...v1.30.4) (2026-08-22)
+
+
+### Bug Fixes
+
+* **tools:** unregister enter_plan_mode/exit_plan_mode (complete [#73](https://github.com/adobe-rnd/da-agent/issues/73)) ([4d6889d](https://github.com/adobe-rnd/da-agent/commit/4d6889d8106f2618dcc38254bea8eb2c55010835)), closes [da-nx#658](https://github.com/da-nx/issues/658)
+
 ## [1.30.3](https://github.com/adobe-rnd/da-agent/compare/v1.30.2...v1.30.3) (2026-08-19)
 
 
