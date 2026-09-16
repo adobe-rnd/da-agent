@@ -35,6 +35,14 @@ describe('getBuiltInMcpServers', () => {
     expect(servers['governance-agent'].instructions).toContain('Live Preview URL');
   });
 
+  it('uses Experience Context while retaining legacy product aliases', () => {
+    const { instructions } = getBuiltInMcpServers(envWith())['governance-agent'];
+    expect(instructions).toContain('"Experience Context" is the current product name');
+    expect(instructions).toContain('"Enterprise Context"');
+    expect(instructions).toContain('"Enterprise Ground Truth"');
+    expect(instructions).toContain('legacy names users may still mention');
+  });
+
   it('uses the URL from env verbatim', () => {
     const servers = getBuiltInMcpServers(
       envWith({ GOVERNANCE_AGENT_URL: 'http://localhost:8000/mcp/' }),

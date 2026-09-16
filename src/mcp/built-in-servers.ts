@@ -11,7 +11,7 @@ Brand rules default to global; rules sharing the same vertical, category, and ID
 
 When necessary, ensure you have the full picture before drawing conclusions about a brand's configuration.
 
-"Enterprise Ground Truth" "Enterprise Context" and similar terms all refer to the Governance Agent MCP.
+"Experience Context" is the current product name. "Enterprise Context" and "Enterprise Ground Truth" are legacy names users may still mention; all refer to the Governance Agent MCP.
 `;
 
 const DA_SC_INSTRUCTIONS = `\
