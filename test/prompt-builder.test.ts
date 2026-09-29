@@ -36,6 +36,15 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain(':::alert-info');
   });
 
+  // HOTFIX(da-nx#658): plan mode is temporarily disabled until the da-nx client
+  // renders plan/tasks. Restore the planning-bracket instructions (and flip this
+  // assertion back to toContain) once #658 lands.
+  it('does not instruct plan mode while the client cannot render it (da-nx#658)', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).not.toContain('enter_plan_mode');
+    expect(prompt).not.toContain(':::task-item');
+  });
+
   it('includes skill suggestion instructions', () => {
     const prompt = buildSystemPrompt();
     expect(prompt).toContain('[SKILL_SUGGESTION]');

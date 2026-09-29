@@ -128,6 +128,14 @@ export function createDATools(
           }
           return await client.getSource(org, repo, ensureHtmlExtension(path));
         } catch (e) {
+          // A missing file is not a failure for the agent — it may be probing an
+          // optional file that doesn't exist yet (e.g. a workflow/approvals JSON
+          // when the backing MCP server isn't wired). Return a graceful not-found
+          // result (no `error` field) so the client doesn't render a red
+          // OUTPUT-ERROR badge and the model can reason about the absence directly.
+          if (isAPIError(e) && e.status === 404) {
+            return { path: ensureHtmlExtension(path), content: null, found: false, status: 404 };
+          }
           if (isAPIError(e)) return { error: e.message, status: e.status };
           return { error: String(e) };
         }
@@ -443,7 +451,15 @@ export function createDATools(
         try {
           const content = await loadSkillBodyFromFolder(client, ctxOrg, ctxRepo, skillId);
           if (!content) return { error: `Skill "${skillId}" not found` };
-          return { skillId, content };
+          return {
+            skillId,
+            content,
+            // HOTFIX(da-nx#658): plan mode temporarily disabled — the da-nx client
+            // on main can't render plan/tasks yet, so don't tell the model to call
+            // enter_plan_mode/exit_plan_mode here. Restore the planning hint once
+            // #658 lands. Matches the gate in src/prompt-builder.ts.
+            _hint: 'Skill loaded. Execute the steps directly.',
+          };
         } catch (e) {
           return { error: String(e) };
         }
@@ -538,6 +554,16 @@ export function createDATools(
         }
       },
     });
+
+    // Planning bracket — mirrors AO's enter_plan_mode / exit_plan_mode built-in tools.
+    //
+    // HOTFIX(da-nx#658): plan mode is disabled until the da-nx client can render
+    // plan/tasks. PR #73 removed the prompt guidance, but the model still called
+    // these tools from their schema descriptions alone — entering plan mode and then
+    // showing a generic approval card for exit_plan_mode (which the client can't render
+    // as a plan). So do NOT register enter_plan_mode / exit_plan_mode at all while
+    // disabled. Both execute() were no-ops and nothing else references them, so this is
+    // self-contained. Restore this block (see git history / PR #73) once #658 lands.
 
     // Memory tools write to internal agent metadata paths — no user approval needed.
     tools.write_project_memory = tool({

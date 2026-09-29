@@ -1,3 +1,78 @@
+## [1.30.4](https://github.com/adobe-rnd/da-agent/compare/v1.30.3...v1.30.4) (2026-08-22)
+
+
+### Bug Fixes
+
+* **tools:** unregister enter_plan_mode/exit_plan_mode (complete [#73](https://github.com/adobe-rnd/da-agent/issues/73)) ([4d6889d](https://github.com/adobe-rnd/da-agent/commit/4d6889d8106f2618dcc38254bea8eb2c55010835)), closes [da-nx#658](https://github.com/da-nx/issues/658)
+
+## [1.30.3](https://github.com/adobe-rnd/da-agent/compare/v1.30.2...v1.30.3) (2026-08-19)
+
+
+### Bug Fixes
+
+* **tools:** content_read returns graceful not-found on 404 instead of error ([cab0e06](https://github.com/adobe-rnd/da-agent/commit/cab0e06e39fa1ce0545d75f9c524a51678296f9a))
+
+## [1.30.2](https://github.com/adobe-rnd/da-agent/compare/v1.30.1...v1.30.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* **prompt:** disable plan mode until da-nx client renders it (da-nx[#658](https://github.com/adobe-rnd/da-agent/issues/658)) ([02e2d05](https://github.com/adobe-rnd/da-agent/commit/02e2d05e8a8a412fe9da89330aff22342453088b))
+
+## [1.30.1](https://github.com/adobe-rnd/da-agent/compare/v1.30.0...v1.30.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* remove leading slash from schema save path in structured-content skills ([120a5b7](https://github.com/adobe-rnd/da-agent/commit/120a5b7f35b6ac1743ee7af5e3ac49ff151ec20c))
+* remove leading slash from schema save path in structured-content skills [#72](https://github.com/adobe-rnd/da-agent/issues/72) ([464f9e2](https://github.com/adobe-rnd/da-agent/commit/464f9e23e6945b909ffcb4ebf27919569212768d))
+
+# [1.30.0](https://github.com/adobe-rnd/da-agent/compare/v1.29.1...v1.30.0) (2026-08-11)
+
+
+### Bug Fixes
+
+* **agents:** address review feedback on da-sc integration ([7055ce3](https://github.com/adobe-rnd/da-agent/commit/7055ce3ca5a2e38eff0dca2774308501cd975ca5))
+* **config:** align DA_SC_MCP_URL trailing slash with GOVERNANCE_AGENT_URL ([228cb33](https://github.com/adobe-rnd/da-agent/commit/228cb3372adf22182490e2d0fbe876a44c3d9260))
+
+
+### Features
+
+* **mcp:** integrate da-sc-mcp as built-in server with adapted skills and expert preset ([9ad5cbf](https://github.com/adobe-rnd/da-agent/commit/9ad5cbf84aa7d444bc10d236895096a026dd4487))
+
+## [1.29.1](https://github.com/adobe-rnd/da-agent/compare/v1.29.0...v1.29.1) (2026-08-11)
+
+
+### Bug Fixes
+
+* **mcp:** disable evaluate_* continuation gate until client supports it ([d6660ba](https://github.com/adobe-rnd/da-agent/commit/d6660ba39bcd9dd82b0d1e6ecbff4728ab65b2d4)), closes [#648](https://github.com/adobe-rnd/da-agent/issues/648) [#522](https://github.com/adobe-rnd/da-agent/issues/522) [#648](https://github.com/adobe-rnd/da-agent/issues/648)
+* **mcp:** disable evaluate_* continuation gate until client supports it ([c6f752c](https://github.com/adobe-rnd/da-agent/commit/c6f752c759ec64711a3f97185cc8b4b45b0c8d1f)), closes [#648](https://github.com/adobe-rnd/da-agent/issues/648) [#522](https://github.com/adobe-rnd/da-agent/issues/522) [#648](https://github.com/adobe-rnd/da-agent/issues/648)
+
+# [1.29.0](https://github.com/adobe-rnd/da-agent/compare/v1.28.0...v1.29.0) (2026-08-11)
+
+
+### Bug Fixes
+
+* **cleanup:** remove complexity. tools can have both pre and continuation approval ([0adb183](https://github.com/adobe-rnd/da-agent/commit/0adb183578b00791c9c8edcfebb0467bb6c3e26f))
+* **prompt:** harden task-item directive rules for plan execution ([696533d](https://github.com/adobe-rnd/da-agent/commit/696533d90e041b8b2cb5063fb6fa15fc17521cfc))
+* Remove preflight tool -> LLM should not decide whether show continuation pop-up. It should be code driven ([23ad3fe](https://github.com/adobe-rnd/da-agent/commit/23ad3fe27a5195c9de6b16d5d3ac7c092b541235))
+* Tools requiring approval were not being returned to the browser ([a0a6ad9](https://github.com/adobe-rnd/da-agent/commit/a0a6ad95590de03af05143941d9273d00bd17dde))
+
+
+### Features
+
+* **preflight:** add run_preflight tool and agent instructions ([6692f12](https://github.com/adobe-rnd/da-agent/commit/6692f12e66589da4ab0d0f27e06b8c3c81852cd8))
+* **preflight:** wire evaluate_page governance REST call in run_preflight ([0f47247](https://github.com/adobe-rnd/da-agent/commit/0f472477c7f38be573394340d55d2a7abf613d2b))
+* Tools that require approval to continue ([ca4ff9a](https://github.com/adobe-rnd/da-agent/commit/ca4ff9a49b2c0b1b8bbcefbcbb33bf0fd2a91db1))
+* **tools:** add submit_plan tool for user-reviewed multi-step execution ([5613c8a](https://github.com/adobe-rnd/da-agent/commit/5613c8a7433c26a16c4a5edc2191edd234deba41))
+
+# [1.28.0](https://github.com/adobe-rnd/da-agent/compare/v1.27.2...v1.28.0) (2026-08-06)
+
+
+### Features
+
+* **skills:** add built-in code skills resolvable by presets ([a899f1e](https://github.com/adobe-rnd/da-agent/commit/a899f1e565770aa8c0b5dccd7a2dbf7328c38eb6))
+
 ## [1.27.2](https://github.com/adobe-rnd/da-agent/compare/v1.27.1...v1.27.2) (2026-07-31)
 
 

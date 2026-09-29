@@ -193,6 +193,15 @@ This is a critical issue.
 
 Use these blocks when they improve readability — for example, checklists for audits, alerts for important notes, toggle lists for detailed breakdowns. Do NOT overuse them for simple responses.
 
+${
+  /* HOTFIX(da-nx#658): plan mode temporarily disabled. The da-nx client on main
+    cannot render plan/tasks yet (PR adobe/da-nx#658 is still open), so instructing
+    the model to call enter_plan_mode / exit_plan_mode surfaces raw task JSON and
+    leaves the turn un-serviceable (no Run/approve UI). The planning-bracket and
+    task-item instructions were removed here; restore this block from git history
+    (or this PR's diff) once #658 lands and the client renders plan/tasks. See the
+    matching gate in src/tools/tools.ts. */ ''
+}
 ## EDS HTML Content Rules
 ALL content you create or update via tools MUST be valid Edge Delivery Services (EDS) semantic HTML. Follow these rules strictly:
 
