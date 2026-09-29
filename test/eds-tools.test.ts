@@ -187,13 +187,14 @@ describe('DA tools still registered when client provided', () => {
       moveContent: vi.fn(),
       createVersion: vi.fn(),
       getVersions: vi.fn(),
-      lookupMedia: vi.fn(),
       lookupFragment: vi.fn(),
       uploadMedia: vi.fn(),
     } as any;
 
     const tools = createDATools(daClient, {});
     expect(tools).toHaveProperty('content_list');
+    expect(tools).toHaveProperty('content_upload');
+    expect(tools).not.toHaveProperty('content_media');
   });
 
   it('da_list_sources absent when daClient is null', () => {

@@ -336,24 +336,6 @@ export function createDATools(
       },
     });
 
-    tools.content_media = tool({
-      description:
-        'Lookup media references in a DA repository. Returns information about media assets including URLs and metadata.',
-      inputSchema: z.object({
-        org: z.string().describe('Organization name'),
-        repo: z.string().describe('Repository name'),
-        mediaPath: z.string().describe('Path to the media file'),
-      }),
-      execute: async ({ org, repo, mediaPath }) => {
-        try {
-          return await client.lookupMedia(org, repo, mediaPath);
-        } catch (e) {
-          if (isAPIError(e)) return { error: e.message, status: e.status };
-          return { error: String(e) };
-        }
-      },
-    });
-
     tools.content_fragment = tool({
       description:
         'Lookup fragment references in a DA repository. Returns information about content fragments.',
