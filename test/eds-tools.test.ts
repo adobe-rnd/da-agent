@@ -1,15 +1,25 @@
-import {
-  describe, it, expect, vi,
-} from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { EDSAdminClient } from '../src/eds-admin/client';
 import { createDATools, createEDSTools } from '../src/tools/tools';
 
 // Minimal mock for EDSAdminClient
 function makeEdsClient(overrides: Partial<EDSAdminClient> = {}): EDSAdminClient {
   return {
-    preview: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index', url: 'https://main--repo--org.hlx.page/docs/index' }),
+    preview: vi
+      .fn()
+      .mockResolvedValue({
+        status: 200,
+        path: '/docs/index',
+        url: 'https://main--repo--org.hlx.page/docs/index',
+      }),
     unpreview: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index' }),
-    publishLive: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index', url: 'https://main--repo--org.hlx.live/docs/index' }),
+    publishLive: vi
+      .fn()
+      .mockResolvedValue({
+        status: 200,
+        path: '/docs/index',
+        url: 'https://main--repo--org.hlx.live/docs/index',
+      }),
     unpublishLive: vi.fn().mockResolvedValue({ status: 200, path: '/docs/index' }),
     ...overrides,
   } as unknown as EDSAdminClient;
@@ -25,7 +35,10 @@ describe('eds_preview tool', () => {
     const edsClient = makeEdsClient();
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_preview.execute({ org: 'myorg', repo: 'myrepo', path: '/docs/index' }, {} as any);
+    const result = await tools.content_preview.execute(
+      { org: 'myorg', repo: 'myrepo', path: '/docs/index' },
+      {} as any,
+    );
 
     expect(edsClient.preview).toHaveBeenCalledWith('myorg', 'myrepo', '/docs/index');
     expect(result).toMatchObject({ status: 200, path: '/docs/index' });
@@ -37,7 +50,10 @@ describe('eds_preview tool', () => {
     });
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_preview.execute({ org: 'o', repo: 'r', path: '/p' }, {} as any);
+    const result = await tools.content_preview.execute(
+      { org: 'o', repo: 'r', path: '/p' },
+      {} as any,
+    );
     expect(result).toMatchObject({ error: 'Not Found', status: 404 });
   });
 });
@@ -52,7 +68,10 @@ describe('eds_publish tool', () => {
     const edsClient = makeEdsClient();
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_publish.execute({ org: 'o', repo: 'r', path: '/docs/index' }, {} as any);
+    const result = await tools.content_publish.execute(
+      { org: 'o', repo: 'r', path: '/docs/index' },
+      {} as any,
+    );
 
     expect(edsClient.preview).toHaveBeenCalledWith('o', 'r', '/docs/index');
     expect(edsClient.publishLive).toHaveBeenCalledWith('o', 'r', '/docs/index');
@@ -68,7 +87,10 @@ describe('eds_publish tool', () => {
     });
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_publish.execute({ org: 'o', repo: 'r', path: '/p' }, {} as any);
+    const result = await tools.content_publish.execute(
+      { org: 'o', repo: 'r', path: '/p' },
+      {} as any,
+    );
 
     expect(edsClient.publishLive).not.toHaveBeenCalled();
     expect(result).toMatchObject({ error: 'Preview failed', status: 500 });
@@ -80,7 +102,10 @@ describe('eds_publish tool', () => {
     });
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_publish.execute({ org: 'o', repo: 'r', path: '/p' }, {} as any);
+    const result = await tools.content_publish.execute(
+      { org: 'o', repo: 'r', path: '/p' },
+      {} as any,
+    );
 
     expect(result).toMatchObject({ error: 'Live failed', status: 502 });
     expect(result).not.toHaveProperty('preview');
@@ -97,7 +122,10 @@ describe('content_unpreview tool', () => {
     const edsClient = makeEdsClient();
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_unpreview.execute({ org: 'o', repo: 'r', path: '/docs/index' }, {} as any);
+    const result = await tools.content_unpreview.execute(
+      { org: 'o', repo: 'r', path: '/docs/index' },
+      {} as any,
+    );
 
     expect(edsClient.unpreview).toHaveBeenCalledWith('o', 'r', '/docs/index');
     expect(result).toMatchObject({ status: 200, path: '/docs/index' });
@@ -109,7 +137,10 @@ describe('content_unpreview tool', () => {
     });
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_unpreview.execute({ org: 'o', repo: 'r', path: '/p' }, {} as any);
+    const result = await tools.content_unpreview.execute(
+      { org: 'o', repo: 'r', path: '/p' },
+      {} as any,
+    );
     expect(result).toMatchObject({ error: 'Not Found', status: 404 });
   });
 });
@@ -124,7 +155,10 @@ describe('content_unpublish tool', () => {
     const edsClient = makeEdsClient();
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_unpublish.execute({ org: 'o', repo: 'r', path: '/docs/index' }, {} as any);
+    const result = await tools.content_unpublish.execute(
+      { org: 'o', repo: 'r', path: '/docs/index' },
+      {} as any,
+    );
 
     expect(edsClient.unpublishLive).toHaveBeenCalledWith('o', 'r', '/docs/index');
     expect(result).toMatchObject({ status: 200, path: '/docs/index' });
@@ -136,7 +170,10 @@ describe('content_unpublish tool', () => {
     });
     const tools = createEDSTools(edsClient);
 
-    const result = await tools.content_unpublish.execute({ org: 'o', repo: 'r', path: '/p' }, {} as any);
+    const result = await tools.content_unpublish.execute(
+      { org: 'o', repo: 'r', path: '/p' },
+      {} as any,
+    );
     expect(result).toMatchObject({ error: 'Live error', status: 502 });
   });
 });
@@ -154,13 +191,14 @@ describe('DA tools still registered when client provided', () => {
       moveContent: vi.fn(),
       createVersion: vi.fn(),
       getVersions: vi.fn(),
-      lookupMedia: vi.fn(),
       lookupFragment: vi.fn(),
       uploadMedia: vi.fn(),
     } as any;
 
     const tools = createDATools(daClient, {});
     expect(tools).toHaveProperty('content_list');
+    expect(tools).toHaveProperty('content_upload');
+    expect(tools).not.toHaveProperty('content_media');
   });
 
   it('da_list_sources absent when daClient is null', () => {

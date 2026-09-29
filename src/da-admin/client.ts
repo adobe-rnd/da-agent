@@ -9,7 +9,6 @@ import type {
   DAListSourcesResponse,
   DASourceContent,
   DAVersionsResponse,
-  DAMediaContent,
   DAMediaReference,
   DAOperationResponse,
 } from './types';
@@ -27,33 +26,26 @@ export class DAAdminClient {
     this.timeout = options.timeout || 30000; // 30 seconds default
   }
 
-  /**
-   * Make an authenticated request to the DA Admin API via service binding.
-   * Pass `binary: true` to receive raw response bytes as base64 with MIME type.
-   */
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit & { binary?: boolean } = {},
-  ): Promise<T> {
-    const { binary, ...requestOptions } = options;
-    const method = requestOptions.method || 'GET';
+  /** Make an authenticated request to the DA Admin API via service binding. */
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    const method = options.method || 'GET';
 
     console.log(`DA Admin API Call: Method: ${method} Endpoint: ${endpoint}`);
 
-    const headers = new Headers(requestOptions.headers || {});
+    const headers = new Headers(options.headers || {});
     headers.set('Authorization', `Bearer ${this.apiToken}`);
 
-    // Only set Content-Type for non-FormData, non-binary requests
-    const isFormData = requestOptions.body instanceof FormData;
-    if (!binary && !isFormData) {
+    // Only set Content-Type for non-FormData requests
+    const isFormData = options.body instanceof FormData;
+    if (!isFormData) {
       headers.set('Content-Type', 'application/json');
     }
 
-    if (requestOptions.body) {
+    if (options.body) {
       if (isFormData) {
         console.log('  Body: FormData (multipart/form-data)');
       } else {
-        console.log('  Body:', requestOptions.body);
+        console.log('  Body:', options.body);
       }
     }
 
@@ -64,7 +56,7 @@ export class DAAdminClient {
 
     try {
       const request = new Request(`https://daadmin${endpoint}`, {
-        ...requestOptions,
+        ...options,
         headers,
         signal: controller.signal,
       });
@@ -101,17 +93,6 @@ export class DAAdminClient {
       }
 
       const contentType = response.headers.get('content-type');
-
-      if (binary) {
-        const mimeType = (contentType || 'application/octet-stream').split(';')[0].trim();
-        const arrayBuffer = await response.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binaryStr = '';
-        for (let i = 0; i < bytes.length; i += 1) {
-          binaryStr += String.fromCharCode(bytes[i]);
-        }
-        return { data: btoa(binaryStr), mimeType } as unknown as T;
-      }
 
       const body = await response.text();
       if (!body) {
@@ -278,14 +259,6 @@ export class DAAdminClient {
   async getVersions(org: string, repo: string, path: string): Promise<DAVersionsResponse> {
     const endpoint = `/versionlist/${org}/${repo}/${path}`;
     return this.request<DAVersionsResponse>(endpoint);
-  }
-
-  /**
-   * Lookup media — returns binary content as base64 with MIME type
-   */
-  async lookupMedia(org: string, repo: string, mediaPath: string): Promise<DAMediaContent> {
-    const endpoint = `/source/${org}/${repo}/${mediaPath}`;
-    return this.request<DAMediaContent>(endpoint, { binary: true });
   }
 
   /**
