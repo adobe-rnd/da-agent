@@ -1,3 +1,10 @@
+## [1.30.5](https://github.com/adobe-rnd/da-agent/compare/v1.30.4...v1.30.5) (2026-09-29)
+
+
+### Bug Fixes
+
+* remove binary media lookup tool ([f18ee81](https://github.com/adobe-rnd/da-agent/commit/f18ee81812b6ebbb6529a49724b15e1b54e20839))
+
 ## [1.30.4](https://github.com/adobe-rnd/da-agent/compare/v1.30.3...v1.30.4) (2026-08-22)
 
 
