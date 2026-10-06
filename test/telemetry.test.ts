@@ -1,7 +1,5 @@
 // test/telemetry.test.ts
-import {
-  describe, it, expect, vi, beforeEach,
-} from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.hoisted ensures these are available when vi.mock factory functions run
 const {
@@ -38,6 +36,8 @@ vi.mock('langfuse-vercel', () => ({
 describe('telemetry', () => {
   let initTelemetry: (env: Partial<Env>) => void;
   let flushTelemetry: () => Promise<void>;
+  let buildChatTelemetryMetadata: typeof import('../src/telemetry.js').buildChatTelemetryMetadata;
+  let getChatTelemetryFunctionId: typeof import('../src/telemetry.js').getChatTelemetryFunctionId;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -46,6 +46,8 @@ describe('telemetry', () => {
     const mod = await import('../src/telemetry.js');
     initTelemetry = mod.initTelemetry as (env: Partial<Env>) => void;
     flushTelemetry = mod.flushTelemetry;
+    buildChatTelemetryMetadata = mod.buildChatTelemetryMetadata;
+    getChatTelemetryFunctionId = mod.getChatTelemetryFunctionId;
   });
 
   it('registers provider when credentials are present', () => {
@@ -112,5 +114,54 @@ describe('telemetry', () => {
     initTelemetry({} as Env);
     await expect(flushTelemetry()).resolves.toBeUndefined();
     expect(mockForceFlush).not.toHaveBeenCalled();
+  });
+
+  it('builds backward-compatible metadata with richer aggregation dimensions', () => {
+    const metadata = buildChatTelemetryMetadata({
+      userId: '12345',
+      org: 'adobe',
+      site: 'da-agent',
+      path: '/docs/index',
+      view: 'edit',
+      sessionId: 'session-1',
+      environment: 'stage',
+      agentId: 'seo-agent',
+      requestedSkills: ['compact', 'seo', 'seo'],
+      toolNames: ['content_update', 'search_docs', 'content_update'],
+      attachmentCount: 2,
+      mcpServerCount: 1,
+      builtInServerCount: 3,
+      generatedToolCount: 4,
+      autoCompact: true,
+    });
+
+    expect(metadata).toMatchObject({
+      userId: '12345',
+      org: 'adobe',
+      site: 'da-agent',
+      path: '/docs/index',
+      sessionId: 'session-1',
+      telemetryVersion: 2,
+      functionId: 'da-agent-chat',
+      environment: 'stage',
+      view: 'edit',
+      entryPoint: 'agent',
+      primarySkill: 'compact',
+      skillCount: 2,
+      requestedSkills: ['compact', 'seo'],
+      agentId: 'seo-agent',
+      toolCount: 2,
+      toolNames: ['content_update', 'search_docs'],
+      attachmentCount: 2,
+      mcpServerCount: 1,
+      builtInServerCount: 3,
+      generatedToolCount: 4,
+      autoCompact: true,
+      hasPageContext: true,
+    });
+  });
+
+  it('preserves the existing telemetry function id for dashboard compatibility', () => {
+    expect(getChatTelemetryFunctionId()).toBe('da-agent-chat');
   });
 });
