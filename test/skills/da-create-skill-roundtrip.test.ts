@@ -14,6 +14,11 @@ import type { DAAdminClient } from '../../src/da-admin/client.js';
  * This exercises the REAL `da_create_skill`/`da_read_skill` tools (not a
  * re-implementation), so it fails against the pre-fix `status: 'draft'` save
  * and passes once `da_create_skill` saves `status: 'approved'`.
+ *
+ * Also pins the follow-up: `da_create_skill` requires explicit human approval
+ * before it executes (same gate as its sibling `da_create_agent`), so a
+ * misclassified or accidental call pauses for a real review/reject - rather
+ * than this fix simply making every call to the tool go live silently.
  */
 function makeStatefulDAClient(): DAAdminClient {
   // In-memory site config, shared across getSiteConfig/saveSiteConfig calls -
@@ -36,6 +41,20 @@ function makeStatefulDAClient(): DAAdminClient {
     },
   } as unknown as DAAdminClient;
 }
+
+describe('da_create_skill requires human approval before it writes', () => {
+  it('needsApproval resolves true (same gate as its sibling da_create_agent)', async () => {
+    const client = makeStatefulDAClient();
+    const tools = createDATools(client, { org: 'myorg', repo: 'mysite' });
+
+    const required = await tools.da_create_skill.needsApproval?.(
+      { skillId: 'x', content: '# X' },
+      { toolCallId: 'x', messages: [] },
+    );
+
+    expect(required).toBe(true);
+  });
+});
 
 describe('da_create_skill -> da_read_skill round trip (regression)', () => {
   it('a skill saved via da_create_skill is immediately readable via da_read_skill', async () => {

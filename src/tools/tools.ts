@@ -481,9 +481,17 @@ export function createDATools(
           .describe('Skill identifier (lowercase alphanumeric with hyphens, e.g., "brand-voice")'),
         content: z.string().describe('Full markdown content of the skill'),
       }),
-      // Writes to the site config are already non-destructive for chat; requiring approval
-      // only showed a generic tool-approval card and blocked the nicer [SKILL_SUGGESTION] UX.
-      needsApproval: async () => false,
+      // Requires approval, same as its sibling da_create_agent (also persists a
+      // named, reusable config asset to the DA site config). This was
+      // previously disabled here on the theory that it would collide with the
+      // nicer [SKILL_SUGGESTION] yellow-card UX - but that flow never calls
+      // da_create_skill (the system prompt explicitly forbids it for a
+      // proactive first offer; only an EXPLICIT user save calls this tool), so
+      // there's no collision. Gating on approval means a human sees the exact
+      // skill id + content and must explicitly confirm before anything is
+      // written - closing the gap where a model miscall would otherwise go
+      // straight to a live, saved skill with no review step at all.
+      needsApproval: async () => true,
       execute: async ({ skillId, content }) => {
         if (!ctxOrg) return { error: 'No organization context available' };
         try {
