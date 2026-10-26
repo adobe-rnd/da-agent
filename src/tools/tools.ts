@@ -481,14 +481,23 @@ export function createDATools(
           .describe('Skill identifier (lowercase alphanumeric with hyphens, e.g., "brand-voice")'),
         content: z.string().describe('Full markdown content of the skill'),
       }),
-      // Draft writes to the site config are already non-destructive for chat; requiring approval
+      // Writes to the site config are already non-destructive for chat; requiring approval
       // only showed a generic tool-approval card and blocked the nicer [SKILL_SUGGESTION] UX.
       needsApproval: async () => false,
       execute: async ({ skillId, content }) => {
         if (!ctxOrg) return { error: 'No organization context available' };
         try {
+          // Saved as 'approved', not 'draft': da_create_skill is the EXPLICIT
+          // persistence path (the system prompt instructs the model never to
+          // call it for a proactive [SKILL_SUGGESTION] offer - only after the
+          // user clearly wants it written). A draft row is excluded by every
+          // read/list path (loadSkillContent, loadSkillsIndex, the folder-first
+          // loaders), so saving a user-requested skill as draft made it
+          // invisible to da_read_skill and the skills index immediately after
+          // creation - the skill the user asked to persist effectively vanished
+          // the moment the chat session ended.
           const result = await saveSkillContent(client, ctxOrg, ctxRepo, skillId, content, {
-            status: 'draft',
+            status: 'approved',
           });
           if (!result.success) return { error: result.error };
           return { skillId, saved: true };
