@@ -1,3 +1,11 @@
+## [1.30.6](https://github.com/adobe-rnd/da-agent/compare/v1.30.5...v1.30.6) (2026-10-28)
+
+
+### Bug Fixes
+
+* **skills:** da_create_skill saves approved so skills are readable immediately ([e336179](https://github.com/adobe-rnd/da-agent/commit/e3361790ac654544dab66898c987f6948b0af96f))
+* **skills:** require approval for da_create_skill before it writes ([de5e40e](https://github.com/adobe-rnd/da-agent/commit/de5e40ec6e95065ad14efdce8af9cabba70239ec))
+
 ## [1.30.5](https://github.com/adobe-rnd/da-agent/compare/v1.30.4...v1.30.5) (2026-09-29)
 
 
