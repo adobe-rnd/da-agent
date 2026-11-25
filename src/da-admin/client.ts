@@ -30,8 +30,6 @@ export class DAAdminClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const method = options.method || 'GET';
 
-    console.log(`DA Admin API Call: Method: ${method} Endpoint: ${endpoint}`);
-
     const headers = new Headers(options.headers || {});
     headers.set('Authorization', `Bearer ${this.apiToken}`);
 
@@ -41,18 +39,11 @@ export class DAAdminClient {
       headers.set('Content-Type', 'application/json');
     }
 
-    if (options.body) {
-      if (isFormData) {
-        console.log('  Body: FormData (multipart/form-data)');
-      } else {
-        console.log('  Body:', options.body);
-      }
-    }
-
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     const startTime = Date.now();
+    let apiError: DAAPIError | undefined;
 
     try {
       const request = new Request(`https://daadmin${endpoint}`, {
@@ -65,14 +56,6 @@ export class DAAdminClient {
 
       clearTimeout(timeoutId);
 
-      const duration = Date.now() - startTime;
-      console.log(
-        'DA Admin API Response:',
-        response.status,
-        response.statusText,
-        `(${duration}ms)`,
-      );
-
       if (!response.ok) {
         const error: DAAPIError = {
           status: response.status,
@@ -83,12 +66,14 @@ export class DAAdminClient {
           const errorData: any = await response.json();
           error.details = errorData;
           error.message = errorData.message || error.message;
-          console.log('DA Admin API Error:', JSON.stringify(error, null, 2));
         } catch {
           // If response is not JSON, use statusText
-          console.log('DA Admin API Error:', error.status, error.message);
         }
 
+        console.warn(
+          `DA Admin API Error: ${method} ${endpoint} ${error.status} ${error.message} (${Date.now() - startTime}ms)`,
+        );
+        apiError = error;
         throw error;
       }
 
@@ -113,7 +98,9 @@ export class DAAdminClient {
         throw timeoutError;
       }
 
-      console.log('DA Admin API Request Failed:', error);
+      if (error !== apiError) {
+        console.error('DA Admin API Request Failed:', method, endpoint, error);
+      }
       throw error;
     }
   }

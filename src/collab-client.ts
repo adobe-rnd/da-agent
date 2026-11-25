@@ -148,7 +148,6 @@ export class CollabClient {
       return;
     }
 
-    console.log(`[CollabClient] Connecting to da-collab for doc: ${this.docPath}`);
     this.status = 'connecting';
 
     this.ydoc = new Y.Doc();
@@ -161,10 +160,6 @@ export class CollabClient {
       disableBc: true,
       // @ts-expect-error -- ServiceBindingWebSocket is compatible but not a WebSocket subclass
       WebSocketPolyfill: WSClass,
-    });
-
-    this.provider.on('status', (event: { status: string }) => {
-      console.log(`[CollabClient] Status: ${event.status} for ${this.docPath}`);
     });
 
     await new Promise<void>((resolve) => {
@@ -242,8 +237,6 @@ export class CollabClient {
         anchor: relJson,
         head: relJson,
       });
-
-      console.log('[CollabClient] Cursor set to start (fragment: prosemirror)');
     } catch (error) {
       console.warn('[CollabClient] Failed to set cursor at start:', error);
     }
@@ -281,8 +274,6 @@ export class CollabClient {
    */
   disconnect(): void {
     if (!this.provider) return;
-
-    console.log(`[CollabClient] Disconnecting from ${this.docPath}`);
 
     if (this.provider.awareness) {
       this.provider.awareness.setLocalState(null);
