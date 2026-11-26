@@ -39,30 +39,7 @@ import {
   createCompactTools,
   COMPACT_SKILL,
 } from './compact.js';
-
-/** Loggable streamText / provider errors (Error#cause chains, non-enumerable fields). */
-function formatErrorForLog(err: unknown): string {
-  if (err instanceof Error) {
-    const lines = [err.message];
-    if (err.stack) lines.push(err.stack);
-    let c: unknown = err.cause;
-    let depth = 0;
-    while (c instanceof Error && depth < 6) {
-      lines.push(`Caused by: ${c.message}`);
-      c = c.cause;
-      depth += 1;
-    }
-    return lines.join('\n');
-  }
-  if (err && typeof err === 'object') {
-    try {
-      return JSON.stringify(err, null, 2);
-    } catch {
-      return Object.prototype.toString.call(err);
-    }
-  }
-  return String(err);
-}
+import { formatErrorForLog, unwrapErrorEvent } from './error-log.js';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -330,12 +307,13 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
       const result = streamText({
         model: bedrock('global.anthropic.claude-sonnet-4-6'),
-        onError: (error) => {
-          console.error('[da-agent] streamText error:', formatErrorForLog(error));
+        onError: (event) => {
+          console.error('[da-agent] streamText error:', formatErrorForLog(event));
 
           // Diagnostic: capture full payload when the Anthropic API rejects orphaned
           // tool_use blocks. This should be rare (ensureOrphanedToolResults injects
           // synthetic results) but if it fires we want the exact messages array.
+          const error = unwrapErrorEvent(event);
           const errMsg = error instanceof Error ? error.message : String(error);
           if (errMsg.includes('tool_use') && errMsg.includes('tool_result')) {
             console.error(
