@@ -6,7 +6,13 @@ import {
   createUIMessageStreamResponse,
   type ModelMessage,
 } from 'ai';
-import { initTelemetry, flushTelemetry } from './telemetry.js';
+import {
+  initTelemetry,
+  flushTelemetry,
+  buildChatTelemetryMetadata,
+  getChatTelemetryFunctionId,
+  telemetryEnabled,
+} from './telemetry.js';
 import { MCPClient } from './mcp/client.js';
 import {
   detectSessionUserPattern,
@@ -220,7 +226,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
 
   console.log(`[da-agent:perf] early=${t1 - t0}ms parallel=${t2 - t1}ms pre-stream=${t2 - t0}ms`);
 
-  const { messages, requestedSkills, imsToken, attachments = [], sessionId } = parsed.data;
+  const { messages, requestedSkills, imsToken, attachments = [], sessionId, agentId } = parsed.data;
 
   const cleanupMCP = () => {
     mcpClients.forEach((c) => {
@@ -308,6 +314,24 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     apiKey: env.AWS_BEARER_TOKEN_BEDROCK,
   });
 
+  const telemetryMetadata = buildChatTelemetryMetadata({
+    userId: extractImsUserId(imsToken),
+    org: ctx.pageContext?.org,
+    site: ctx.pageContext?.site,
+    path: ctx.pageContext?.path,
+    view: ctx.pageContext?.view,
+    sessionId,
+    environment: env.ENVIRONMENT,
+    agentId,
+    requestedSkills,
+    toolNames: Object.keys(allTools),
+    attachmentCount: attachments.length,
+    mcpServerCount: mcpClients.length,
+    builtInServerCount: Object.keys(builtInServers).length,
+    generatedToolCount: generatedToolsIndex.tools.length,
+    autoCompact: autoCompact || userRequestedCompact,
+  });
+
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       // Stream results for tools the user approved this round so the client can
@@ -365,15 +389,9 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
           },
         ],
         experimental_telemetry: {
-          isEnabled: true,
-          functionId: 'da-agent-chat',
-          metadata: {
-            userId: extractImsUserId(imsToken) ?? 'unknown',
-            org: ctx.pageContext?.org ?? 'unknown',
-            site: ctx.pageContext?.site ?? 'unknown',
-            path: ctx.pageContext?.path ?? 'unknown',
-            sessionId: sessionId ?? 'unknown',
-          },
+          isEnabled: telemetryEnabled(env),
+          functionId: getChatTelemetryFunctionId(),
+          metadata: telemetryMetadata,
         },
       });
 
