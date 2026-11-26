@@ -1,3 +1,10 @@
+## [1.30.7](https://github.com/adobe-rnd/da-agent/compare/v1.30.6...v1.30.7) (2026-11-26)
+
+
+### Bug Fixes
+
+* log compact streamText errors without request body ([24220c4](https://github.com/adobe-rnd/da-agent/commit/24220c4be17ffaac4a084c5b0c33c29f308388de))
+
 ## [1.30.6](https://github.com/adobe-rnd/da-agent/compare/v1.30.5...v1.30.6) (2026-10-28)
 
 
